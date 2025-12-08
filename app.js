@@ -18,7 +18,7 @@ app.use(express.static('public'));
 // Environment
 // ──────────────────────────────────────────────────────────
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.1';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'text-embedding-3-small';
 const DRY_RUN_EMBEDDINGS = String(process.env.DRY_RUN_EMBEDDINGS || '') === '1';
 
@@ -164,7 +164,7 @@ User query:
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        temperature: 0.8,
+        // temperature: 0.8,
         messages: [
           { role: 'system', content: 'You expand search queries with synonyms and related terms. Output plain text only, no bullet points.' },
           { role: 'user', content: prompt }
@@ -493,7 +493,7 @@ ${contextBody}
       body: JSON.stringify({
         model      : OPENAI_MODEL,
         stream     : true,
-        temperature: 0.2,
+        // temperature: 0.2,
         messages
       })
     });
