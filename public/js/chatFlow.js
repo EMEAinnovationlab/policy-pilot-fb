@@ -3,7 +3,7 @@ import { renderAssistantHeader, getOrCreateContentContainer } from './strapline.
 import { renderMarkdownAndFadeNew } from './markdown.js';
 
 export function createChatController({
-  dom,        // { chat, input, sendBtn, stopBtn, clearBtn }
+  dom,        // { chat, input, sendBtn, stopBtn, clearBtn, useDbToggle? }
   examples,   // { closeExamples }
   config      // { STRAPLINE, DEFAULT_WELCOME_PROMPT }
 }) {
@@ -26,13 +26,17 @@ export function createChatController({
     if (isStreaming) {
       if (dom.sendBtn) { dom.sendBtn.disabled = true; dom.sendBtn.style.opacity = '0.6'; dom.sendBtn.style.cursor = 'not-allowed'; }
       if (dom.input) { dom.input.disabled = true; dom.input.setAttribute('aria-busy', 'true'); }
+      // Optional: lock toggle while streaming to avoid mismatch
+      if (dom.useDbToggle) dom.useDbToggle.disabled = true;
       show(dom.stopBtn);
     } else {
       if (dom.sendBtn) { dom.sendBtn.disabled = false; dom.sendBtn.style.opacity = '1'; dom.sendBtn.style.cursor = 'pointer'; }
       if (dom.input) { dom.input.disabled = false; dom.input.removeAttribute('aria-busy'); }
+      if (dom.useDbToggle) dom.useDbToggle.disabled = false;
       hide(dom.stopBtn);
     }
   }
+
   function showThinking(div, on = true) {
     if (on && !div._spinner) {
       const s = document.createElement('span');
@@ -51,6 +55,7 @@ export function createChatController({
     dom.input.style.height = '56px';
     dom.input.style.overflowY = 'hidden';
   }
+
   function autoGrowTextarea() {
     if (!dom.input) return;
     dom.input.style.height = 'auto';
@@ -59,10 +64,16 @@ export function createChatController({
     dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
   }
 
+  // Helper: read toggle safely
+  function getUseRetrievalFlag() {
+    // Default: false if toggle missing
+    return !!dom.useDbToggle?.checked;
+  }
+
   // --- main streaming flow (spinner -> strapline -> content)
   async function streamAssistantFromPrompt(
     prompt,
-    { echoUser = true, closeExamplesOnStart = true, straplineText } = {}
+    { echoUser = true, closeExamplesOnStart = true, straplineText, useRetrieval = false } = {}
   ) {
     if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
 
@@ -88,7 +99,8 @@ export function createChatController({
       const resp = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt }),
+        // 👇 NEW: include useRetrieval flag
+        body: JSON.stringify({ message: prompt, useRetrieval }),
         signal: controller.signal
       });
 
@@ -178,10 +190,16 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true });
+
+    const useRetrieval = getUseRetrievalFlag();
+
+    await streamAssistantFromPrompt(text, {
+      echoUser: true,
+      closeExamplesOnStart: true,
+      useRetrieval
+    });
   }
 
-  // public API + a couple helpers needed by examples
   return {
     sendMessage,
     streamAssistantFromPrompt,

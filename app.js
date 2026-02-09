@@ -164,7 +164,6 @@ User query:
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        // temperature: 0.8,
         messages: [
           { role: 'system', content: 'You expand search queries with synonyms and related terms. Output plain text only, no bullet points.' },
           { role: 'user', content: prompt }
@@ -319,7 +318,7 @@ api.get('/documents/list-raw', async (_req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────
-// Chat endpoint (SSE stream) — improved RAG wiring + synonyms
+// Chat endpoint (SSE stream) — RAG gated by req.body.useRetrieval
 // ──────────────────────────────────────────────────────────
 api.post('/chat', async (req, res) => {
   try {
@@ -328,12 +327,20 @@ api.post('/chat', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Empty message' });
     }
 
-    // Expand query with synonyms / related terms for better recall
-    const expandedQuery = await expandQueryWithSynonyms(userMessage);
+    // ✅ NEW: Frontend toggle (checkbox) controls whether we do RAG / vector calls.
+    const useRetrieval = !!req.body?.useRetrieval;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+
+    // Defaults when retrieval is OFF
+    let expandedQuery = userMessage;
+    let pm = { matches: [], error: null };
+    let ed = { matches: [], error: null };
+    let sources = [];
+    let contextBody = '(retrieval disabled)';
+    let totalHits = 0, hitsPm = 0, hitsEd = 0;
 
     // Small helper to call the Edge Function with an optional uploaded_by filter
     async function callRag(uploadedByLabel) {
@@ -372,94 +379,104 @@ api.post('/chat', async (req, res) => {
       return { matches: json?.matches || [], error: null };
     }
 
-    // 1️⃣ Two pulls: Public Matters (🔴) & Edelman (🔵)
-    const [pm, ed] = await Promise.all([
-      callRag('Public Matters'),
-      callRag('Edelman')
-    ]);
+    // ✅ Only do query-expansion + vector retrieval when toggle is ON
+    if (useRetrieval) {
+      // Expand query with synonyms / related terms for better recall
+      expandedQuery = await expandQueryWithSynonyms(userMessage);
 
-    const allMatches = [
-      ...(pm.matches || []).map(m => ({ ...m, uploaded_by: m.uploaded_by || 'Public Matters' })),
-      ...(ed.matches || []).map(m => ({ ...m, uploaded_by: m.uploaded_by || 'Edelman' }))
-    ];
+      // 1️⃣ Two pulls: Public Matters (🔴) & Edelman (🔵)
+      const results = await Promise.all([
+        callRag('Public Matters'),
+        callRag('Edelman')
+      ]);
+      pm = results[0];
+      ed = results[1];
 
-    // Full debug logging of ALL RAG matches with full snippet text
-    console.log('────────────────────────────────────────────');
-    console.log('RAG DEBUG: total matches:', allMatches.length);
-    console.log('PM matches:', (pm.matches || []).length, ' | ED matches:', (ed.matches || []).length);
-    console.log('────────────────────────────────────────────');
+      const allMatches = [
+        ...(pm.matches || []).map(m => ({ ...m, uploaded_by: m.uploaded_by || 'Public Matters' })),
+        ...(ed.matches || []).map(m => ({ ...m, uploaded_by: m.uploaded_by || 'Edelman' }))
+      ];
 
-    allMatches.forEach((m, i) => {
-      const baseTitle =
-        m.doc_name ||
-        m.naam ||
-        m.bron ||
-        `Bron #${i + 1}`;
-
-      const snippetText = (
-        m.invloed_text ||
-        m.summary ||
-        m.excerpt ||
-        (typeof m.content === 'string'
-          ? m.content
-          : JSON.stringify(m.content || ''))
-      ).toString().trim();
-
-      console.log(`[#${i + 1}] uploaded_by=${m.uploaded_by}`);
-      console.log(`Title: ${baseTitle}`);
-      console.log('Full snippet:');
-      console.log(snippetText || '(empty)');
+      // Full debug logging of ALL RAG matches with full snippet text
       console.log('────────────────────────────────────────────');
-    });
+      console.log('RAG DEBUG: total matches:', allMatches.length);
+      console.log('PM matches:', (pm.matches || []).length, ' | ED matches:', (ed.matches || []).length);
+      console.log('────────────────────────────────────────────');
 
-    // If the function is down / misconfigured, surface that visibly
-    if ((pm.error && !pm.matches.length) && (ed.error && !ed.matches.length)) {
-      sse(res, { type: 'error', message: 'RAG backend (query-docs) is not responding or misconfigured.' });
-    }
+      allMatches.forEach((m, i) => {
+        const baseTitle =
+          m.doc_name ||
+          m.naam ||
+          m.bron ||
+          `Bron #${i + 1}`;
 
-    const snippets = [];
-    const sources  = [];
-    let used = 0;
-    const maxChars = 6000;
+        const snippetText = (
+          m.invloed_text ||
+          m.summary ||
+          m.excerpt ||
+          (typeof m.content === 'string'
+            ? m.content
+            : JSON.stringify(m.content || ''))
+        ).toString().trim();
 
-    // Build nice, tagged context blocks
-    for (const [i, m] of allMatches.entries()) {
-      const src  = (m.uploaded_by || '').toString().trim();
-      const tag  = src.toLowerCase().includes('edelman') ? '🔵 Edelman' : '🔴 Public Matters';
-      const baseTitle = m.doc_name || m.naam || m.bron || `Bron #${i + 1}`;
-      const title = `${tag} – ${baseTitle}`;
-
-      const snippetText = (
-        m.invloed_text ||
-        m.summary ||
-        m.excerpt ||
-        (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || ''))
-      ).toString().trim();
-
-      if (!snippetText) continue;
-
-      const block = `[#${i + 1}] ${title}\n${snippetText}\n---\n`;
-      if (used + block.length > maxChars) break;
-
-      snippets.push(block);
-      used += block.length;
-
-      sources.push({
-        n    : i + 1,
-        title,
-        url  : m.url || null,
-        uploaded_by: src
+        console.log(`[#${i + 1}] uploaded_by=${m.uploaded_by}`);
+        console.log(`Title: ${baseTitle}`);
+        console.log('Full snippet:');
+        console.log(snippetText || '(empty)');
+        console.log('────────────────────────────────────────────');
       });
-    }
 
-    const totalHits    = allMatches.length;
-    const hitsPm       = (pm.matches || []).length;
-    const hitsEd       = (ed.matches || []).length;
-    const contextBody  = snippets.join('') || '(no relevant matches found)';
+      // If the function is down / misconfigured, surface that visibly
+      if ((pm.error && !pm.matches.length) && (ed.error && !ed.matches.length)) {
+        sse(res, { type: 'error', message: 'RAG backend (query-docs) is not responding or misconfigured.' });
+      }
+
+      const snippets = [];
+      sources  = [];
+      let used = 0;
+      const maxChars = 6000;
+
+      // Build nice, tagged context blocks
+      for (const [i, m] of allMatches.entries()) {
+        const src  = (m.uploaded_by || '').toString().trim();
+        const tag  = src.toLowerCase().includes('edelman') ? '🔵 Edelman' : '🔴 Public Matters';
+        const baseTitle = m.doc_name || m.naam || m.bron || `Bron #${i + 1}`;
+        const title = `${tag} – ${baseTitle}`;
+
+        const snippetText = (
+          m.invloed_text ||
+          m.summary ||
+          m.excerpt ||
+          (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || ''))
+        ).toString().trim();
+
+        if (!snippetText) continue;
+
+        const block = `[#${i + 1}] ${title}\n${snippetText}\n---\n`;
+        if (used + block.length > maxChars) break;
+
+        snippets.push(block);
+        used += block.length;
+
+        sources.push({
+          n    : i + 1,
+          title,
+          url  : m.url || null,
+          uploaded_by: src
+        });
+      }
+
+      totalHits    = allMatches.length;
+      hitsPm       = (pm.matches || []).length;
+      hitsEd       = (ed.matches || []).length;
+      contextBody  = snippets.join('') || '(no relevant matches found)';
+    }
 
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      {
+
+      // ✅ Only include RAG context system message if retrieval is ON
+      ...(useRetrieval ? [{
         role   : 'system',
         content: `
 You have access to a vector database with documents from:
@@ -479,7 +496,8 @@ Use the CONTEXT below as your primary source of truth. If there are no relevant 
 CONTEXT DOCUMENT EXCERPTS:
 ${contextBody}
         `.trim()
-      },
+      }] : []),
+
       { role: 'user', content: userMessage }
     ];
 
@@ -493,7 +511,6 @@ ${contextBody}
       body: JSON.stringify({
         model      : OPENAI_MODEL,
         stream     : true,
-        // temperature: 0.2,
         messages
       })
     });
@@ -522,8 +539,8 @@ ${contextBody}
         if (!t.startsWith('data:')) continue;
         const payload = t.slice(5).trim();
         if (payload === '[DONE]') {
-          // send sources at the end so your frontend can render them
-          sse(res, { type: 'sources', items: sources });
+          // ✅ Only send sources when retrieval is ON (otherwise empty list)
+          sse(res, { type: 'sources', items: useRetrieval ? sources : [] });
           sse(res, { type: 'done' });
           return res.end();
         }
@@ -884,4 +901,3 @@ api.get('/example-prompts', async (_req, res) => {
 // Export (no app.listen for Vercel)
 // ──────────────────────────────────────────────────────────
 module.exports = app;
-  

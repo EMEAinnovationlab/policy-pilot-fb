@@ -98,8 +98,10 @@ const examples = {
 
 // ──────────────────────────────────────────────────────────
 /** Chat controller */
+const useDbToggle = document.getElementById('use-db');
+
 const controller = createChatController({
-  dom: { chat, input, sendBtn, stopBtn, clearBtn },
+  dom: { chat, input, sendBtn, stopBtn, clearBtn, useDbToggle },
   examples,
   config: { STRAPLINE, DEFAULT_WELCOME_PROMPT }
 });
