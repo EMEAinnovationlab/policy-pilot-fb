@@ -48,7 +48,14 @@ console.log('🔧 REST :', SUPABASE_REST_URL);
 console.log('🔧 FXN  :', SUPABASE_FUNCTIONS_URL);
 
 // ──────────────────────────────────────────────────────────
+// Prompts (two-mode: RAG vs non-RAG)
+// ──────────────────────────────────────────────────────────
 let SYSTEM_PROMPT = `You are Poli Pilot, a concise assistant. Cite sources inline like [#n].`;
+
+let SYSTEM_PROMPT_NO_RAG = `You are Poli Pilot, a concise assistant.
+You do NOT have access to the document database right now.
+Do not invent citations or claim you searched documents.
+If the user asks you to search the documents, tell them to enable “zoek in politieke data”.`;
 
 // Basic SSE helper
 function sse(res, obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
@@ -68,17 +75,29 @@ async function supabaseRest(path, { method = 'GET', body, headers = {} } = {}) {
   const r = await fetch(url, { method, headers: allHeaders, body: body ? JSON.stringify(body) : undefined });
   const text = await r.text();
   let json; try { json = text ? JSON.parse(text) : null; } catch { json = text; }
-  if (!r.ok) { console.error(`[Supabase REST ${method}] ${url} -> ${r.status}`, json); throw new Error(`${r.status} ${JSON.stringify(json)}`); }
+  if (!r.ok) {
+    console.error(`[Supabase REST ${method}] ${url} -> ${r.status}`, json);
+    throw new Error(`${r.status} ${JSON.stringify(json)}`);
+  }
   return json;
 }
 
-// System prompt refresher
+// System prompt refresher (fetch both prompts)
 async function fetchSystemPromptFromDB() {
   try {
-    const rows = await supabaseRest(`/project_settings?select=setting_content&setting_name=eq.system_prompt&limit=1`);
-    const content = Array.isArray(rows) && rows[0]?.setting_content ? String(rows[0].setting_content).trim() : '';
-    if (content) SYSTEM_PROMPT = content;
-  } catch (e) { console.warn('⚠️ Could not fetch system prompt:', e.message || e); }
+    const rows = await supabaseRest(
+      `/project_settings?select=setting_name,setting_content&setting_name=in.(system_prompt,system_prompt_no_rag)`
+    );
+    for (const r of rows) {
+      const key = String(r.setting_name || '').trim();
+      const val = String(r.setting_content || '').trim();
+      if (!val) continue;
+      if (key === 'system_prompt') SYSTEM_PROMPT = val;
+      if (key === 'system_prompt_no_rag') SYSTEM_PROMPT_NO_RAG = val;
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not fetch system prompts:', e.message || e);
+  }
 }
 fetchSystemPromptFromDB();
 setInterval(fetchSystemPromptFromDB, 60000);
@@ -86,7 +105,9 @@ setInterval(fetchSystemPromptFromDB, 60000);
 // ──────────────────────────────────────────────────────────
 // JWT + Cookies
 // ──────────────────────────────────────────────────────────
-function base64url(input) { return Buffer.from(input).toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); }
+function base64url(input) {
+  return Buffer.from(input).toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
 function signJwt(payload, secret, expiresSec = 60 * 60 * 24 * 7) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
@@ -94,14 +115,16 @@ function signJwt(payload, secret, expiresSec = 60 * 60 * 24 * 7) {
   const h = base64url(JSON.stringify(header));
   const p = base64url(JSON.stringify(body));
   const data = `${h}.${p}`;
-  const sig = crypto.createHmac('sha256', secret).update(data).digest('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+  const sig = crypto.createHmac('sha256', secret).update(data).digest('base64')
+    .replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
   return `${data}.${sig}`;
 }
 function verifyJwt(token, secret) {
   try {
     const [h, p, sig] = token.split('.');
     const data = `${h}.${p}`;
-    const expected = crypto.createHmac('sha256', secret).update(data).digest('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const expected = crypto.createHmac('sha256', secret).update(data).digest('base64')
+      .replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
     if (expected !== sig) return null;
     const payload = JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
     if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
@@ -110,17 +133,30 @@ function verifyJwt(token, secret) {
 }
 function parseCookies(req) {
   const h = req.headers.cookie || '';
-  return h.split(';').reduce((acc, kv) => { const [k, ...v] = kv.trim().split('='); if (!k) return acc; acc[k] = decodeURIComponent(v.join('=')); return acc; }, {});
+  return h.split(';').reduce((acc, kv) => {
+    const [k, ...v] = kv.trim().split('=');
+    if (!k) return acc;
+    acc[k] = decodeURIComponent(v.join('='));
+    return acc;
+  }, {});
 }
 function setCookie(res, name, value, opts = {}) {
   const isProd = process.env.NODE_ENV === 'production';
-  const { httpOnly = true, secure = isProd, sameSite = 'Lax', path = '/', maxAge = 60 * 60 * 24 * 7 } = opts;
+  const {
+    httpOnly = true,
+    secure = isProd,
+    sameSite = 'Lax',
+    path = '/',
+    maxAge = 60 * 60 * 24 * 7
+  } = opts;
   const parts = [`${name}=${value}`, `Path=${path}`, `Max-Age=${maxAge}`, `SameSite=${sameSite}`];
   if (httpOnly) parts.push('HttpOnly');
   if (secure) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
-function clearCookie(res, name) { res.setHeader('Set-Cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict`); }
+function clearCookie(res, name) {
+  res.setHeader('Set-Cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict`);
+}
 
 // ──────────────────────────────────────────────────────────
 // Embeddings helper (kept for ingest flows)
@@ -279,7 +315,8 @@ api.post('/auth/manual/verify', async (req, res) => {
 api.get('/project-settings', async (_req, res) => {
   try {
     const rows = await supabaseRest(`/project_settings?select=setting_name,setting_content`);
-    const settings = {}; for (const r of rows) settings[r.setting_name] = r.setting_content;
+    const settings = {};
+    for (const r of rows) settings[r.setting_name] = r.setting_content;
     res.json({ ok: true, settings });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -300,7 +337,8 @@ api.get('/site-content', async (req, res) => {
 api.get('/documents/list', async (_req, res) => {
   try {
     const rows = await supabaseRest(`/documents?select=doc_name,uploaded_by&order=uploaded_by.asc,doc_name.asc`);
-    const seen = new Set(); const items = [];
+    const seen = new Set();
+    const items = [];
     for (const r of rows) {
       const n = (r.doc_name || '').trim();
       if (n && !seen.has(n)) { seen.add(n); items.push({ doc_name: n, uploaded_by: r.uploaded_by || '' }); }
@@ -327,7 +365,7 @@ api.post('/chat', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Empty message' });
     }
 
-    // ✅ NEW: Frontend toggle (checkbox) controls whether we do RAG / vector calls.
+    // Frontend toggle (checkbox) controls whether we do RAG / vector calls.
     const useRetrieval = !!req.body?.useRetrieval;
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -369,9 +407,8 @@ api.post('/chat', async (req, res) => {
       }
 
       let json;
-      try {
-        json = await resp.json();
-      } catch (e) {
+      try { json = await resp.json(); }
+      catch (e) {
         console.error('[query-docs] invalid JSON:', e);
         return { matches: [], error: 'query-docs JSON parse error' };
       }
@@ -379,12 +416,11 @@ api.post('/chat', async (req, res) => {
       return { matches: json?.matches || [], error: null };
     }
 
-    // ✅ Only do query-expansion + vector retrieval when toggle is ON
+    // Only do query-expansion + vector retrieval when toggle is ON
     if (useRetrieval) {
-      // Expand query with synonyms / related terms for better recall
       expandedQuery = await expandQueryWithSynonyms(userMessage);
 
-      // 1️⃣ Two pulls: Public Matters (🔴) & Edelman (🔵)
+      // Two pulls: Public Matters (🔴) & Edelman (🔵)
       const results = await Promise.all([
         callRag('Public Matters'),
         callRag('Edelman')
@@ -404,19 +440,12 @@ api.post('/chat', async (req, res) => {
       console.log('────────────────────────────────────────────');
 
       allMatches.forEach((m, i) => {
-        const baseTitle =
-          m.doc_name ||
-          m.naam ||
-          m.bron ||
-          `Bron #${i + 1}`;
-
+        const baseTitle = m.doc_name || m.naam || m.bron || `Bron #${i + 1}`;
         const snippetText = (
           m.invloed_text ||
           m.summary ||
           m.excerpt ||
-          (typeof m.content === 'string'
-            ? m.content
-            : JSON.stringify(m.content || ''))
+          (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || ''))
         ).toString().trim();
 
         console.log(`[#${i + 1}] uploaded_by=${m.uploaded_by}`);
@@ -432,7 +461,7 @@ api.post('/chat', async (req, res) => {
       }
 
       const snippets = [];
-      sources  = [];
+      sources = [];
       let used = 0;
       const maxChars = 6000;
 
@@ -459,25 +488,27 @@ api.post('/chat', async (req, res) => {
         used += block.length;
 
         sources.push({
-          n    : i + 1,
+          n: i + 1,
           title,
-          url  : m.url || null,
+          url: m.url || null,
           uploaded_by: src
         });
       }
 
-      totalHits    = allMatches.length;
-      hitsPm       = (pm.matches || []).length;
-      hitsEd       = (ed.matches || []).length;
-      contextBody  = snippets.join('') || '(no relevant matches found)';
+      totalHits   = allMatches.length;
+      hitsPm      = (pm.matches || []).length;
+      hitsEd      = (ed.matches || []).length;
+      contextBody = snippets.join('') || '(no relevant matches found)';
     }
 
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+    // ✅ NEW: choose system prompt based on toggle
+    const activeSystemPrompt = useRetrieval ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_RAG;
 
-      // ✅ Only include RAG context system message if retrieval is ON
+    const messages = [
+      { role: 'system', content: activeSystemPrompt },
+
       ...(useRetrieval ? [{
-        role   : 'system',
+        role: 'system',
         content: `
 You have access to a vector database with documents from:
 - 🔴 Public Matters (policy, parties, issue papers)
@@ -501,7 +532,7 @@ ${contextBody}
       { role: 'user', content: userMessage }
     ];
 
-    // 2️⃣ Call OpenAI with streaming
+    // Call OpenAI with streaming
     const openaiResp = await fetch('https://api.openai.com/v1/chat/completions', {
       method : 'POST',
       headers: {
@@ -509,8 +540,8 @@ ${contextBody}
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model      : OPENAI_MODEL,
-        stream     : true,
+        model  : OPENAI_MODEL,
+        stream : true,
         messages
       })
     });
@@ -539,7 +570,6 @@ ${contextBody}
         if (!t.startsWith('data:')) continue;
         const payload = t.slice(5).trim();
         if (payload === '[DONE]') {
-          // ✅ Only send sources when retrieval is ON (otherwise empty list)
           sse(res, { type: 'sources', items: useRetrieval ? sources : [] });
           sse(res, { type: 'done' });
           return res.end();
@@ -567,7 +597,8 @@ ${contextBody}
 api.get('/admin/settings', async (_req, res) => {
   try {
     const rows = await supabaseRest(`/project_settings?select=setting_name,setting_content`);
-    const settings = {}; for (const r of rows) settings[r.setting_name] = r.setting_content;
+    const settings = {};
+    for (const r of rows) settings[r.setting_name] = r.setting_content;
     res.json({ ok: true, settings });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -576,9 +607,7 @@ api.patch('/admin/settings', async (req, res) => {
   try {
     const payload = req.body || {};
     const keys = Object.keys(payload);
-    if (!keys.length) {
-      return res.status(400).json({ ok: false, error: 'Empty payload' });
-    }
+    if (!keys.length) return res.status(400).json({ ok: false, error: 'Empty payload' });
 
     const updated = {};
 
@@ -593,7 +622,7 @@ api.patch('/admin/settings', async (req, res) => {
           headers: { Prefer: 'return=representation' },
           body   : { setting_content: value }
         });
-      } catch (e) {
+      } catch {
         rows = null;
       }
 
@@ -611,9 +640,9 @@ api.patch('/admin/settings', async (req, res) => {
 
       if (row) {
         updated[row.setting_name] = row.setting_content;
-        if (row.setting_name === 'system_prompt') {
-          SYSTEM_PROMPT = String(row.setting_content ?? '').trim();
-        }
+        // Keep in-memory prompts in sync
+        if (row.setting_name === 'system_prompt') SYSTEM_PROMPT = String(row.setting_content ?? '').trim();
+        if (row.setting_name === 'system_prompt_no_rag') SYSTEM_PROMPT_NO_RAG = String(row.setting_content ?? '').trim();
       }
     }
 
@@ -641,7 +670,12 @@ api.post('/admin/example-prompts', async (req, res) => {
     const ins = await supabaseRest(`/example_prompts`, {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: [{ prompt_title_en: b.prompt_title_en || '', prompt_full_en: b.prompt_full_en || '', prompt_title_nl: b.prompt_title_nl || '', prompt_full_nl: b.prompt_full_nl || '' }]
+      body: [{
+        prompt_title_en: b.prompt_title_en || '',
+        prompt_full_en : b.prompt_full_en  || '',
+        prompt_title_nl: b.prompt_title_nl || '',
+        prompt_full_nl : b.prompt_full_nl  || ''
+      }]
     });
     res.json({ ok: true, item: ins?.[0] });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -649,15 +683,21 @@ api.post('/admin/example-prompts', async (req, res) => {
 
 api.patch('/admin/example-prompts/:id', async (req, res) => {
   try {
-    const id = Number(req.params.id); if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
-    const upd = await supabaseRest(`/example_prompts?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: req.body || {} });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
+    const upd = await supabaseRest(`/example_prompts?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: req.body || {}
+    });
     res.json({ ok: true, item: upd?.[0] });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 api.delete('/admin/example-prompts/:id', async (req, res) => {
   try {
-    const id = Number(req.params.id); if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
     await supabaseRest(`/example_prompts?id=eq.${id}`, { method: 'DELETE' });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -666,15 +706,20 @@ api.delete('/admin/example-prompts/:id', async (req, res) => {
 // ──────────────────────────────────────────────────────────
 // Admin: DATA (upload/list/delete)
 // ──────────────────────────────────────────────────────────
-
-// CORS preflight helpers to avoid 405 on Vercel
 api.options('/admin/data/upload', (_req, res) => res.status(204).end());
 api.options('/admin/ingest', (_req, res) => res.status(204).end());
 
 api.get('/admin/data/list', async (_req, res) => {
   try {
     const rows = await supabaseRest(`/documents?select=doc_name,uploaded_by,created_at:date_uploaded&order=date_uploaded.desc`);
-    res.json({ ok: true, items: rows.map(r => ({ doc_name: r.doc_name, uploaded_by: r.uploaded_by || '', created_at: r.created_at || null })) });
+    res.json({
+      ok: true,
+      items: rows.map(r => ({
+        doc_name: r.doc_name,
+        uploaded_by: r.uploaded_by || '',
+        created_at: r.created_at || null
+      }))
+    });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -690,10 +735,7 @@ api.delete('/admin/data/:doc_name', async (req, res) => {
 // Core upload worker used by both /admin/data/upload and /admin/ingest
 function handleSpreadsheetUpload(req, res) {
   try {
-    const bb = Busboy({
-      headers: req.headers,
-      limits: { files: 1, fileSize: 25 * 1024 * 1024 }
-    });
+    const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: 25 * 1024 * 1024 } });
 
     let fileBuf = Buffer.alloc(0);
     let filename = '';
@@ -701,14 +743,10 @@ function handleSpreadsheetUpload(req, res) {
 
     bb.on('file', (_name, file, info) => {
       filename = info.filename || 'upload';
-      file.on('data', d => {
-        fileBuf = Buffer.concat([fileBuf, d]);
-      });
+      file.on('data', d => { fileBuf = Buffer.concat([fileBuf, d]); });
     });
 
-    bb.on('field', (name, val) => {
-      fields[name] = val;
-    });
+    bb.on('field', (name, val) => { fields[name] = val; });
 
     bb.on('finish', async () => {
       try {
@@ -718,17 +756,16 @@ function handleSpreadsheetUpload(req, res) {
 
         const records = [];
         if (ext === 'xlsx') {
-          const wb    = XLSX.read(fileBuf, { type: 'buffer' });
+          const wb = XLSX.read(fileBuf, { type: 'buffer' });
           const sheet = wb.SheetNames[0];
-          const rows  = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { raw: false });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { raw: false });
           for (const r of rows) records.push(r);
         } else {
-          const text  = fileBuf.toString('utf8');
-          const rows  = csvParse(text, { columns: true, skip_empty_lines: true });
+          const text = fileBuf.toString('utf8');
+          const rows = csvParse(text, { columns: true, skip_empty_lines: true });
           for (const r of rows) records.push(r);
         }
 
-        // from form
         const docName    = (fields.doc_name || '').trim()    || filename;
         const uploadedBy = (fields.uploaded_by || '').trim() || 'admin';
 
@@ -744,30 +781,21 @@ function handleSpreadsheetUpload(req, res) {
         }
 
         // UPLOAD MODE
-        if (!records.length) {
-          return res.json({ ok: true, count: 0, doc_name: docName });
-        }
+        if (!records.length) return res.json({ ok: true, count: 0, doc_name: docName });
 
         // One logical document_id for this whole upload
         const documentId = crypto.randomUUID();
 
         const payload = records.map((r, idx) => ({
-          // schema fields
-          document_id : documentId,           // NOT NULL
+          document_id : documentId,
           doc_name    : docName,
           uploaded_by : uploadedBy,
-
-          // optional: use row index as chunk_index
           chunk_index : idx,
-
-          // map known columns if present in CSV/XLSX
-          datum       : r.datum       ?? null,
-          naam        : r.naam        ?? null,
-          bron        : r.bron        ?? null,
-          link        : r.link        ?? null,
+          datum       : r.datum        ?? null,
+          naam        : r.naam         ?? null,
+          bron        : r.bron         ?? null,
+          link        : r.link         ?? null,
           invloed_text: r.invloed_text ?? null,
-
-          // keep the full original row as JSON for safety
           content     : r.content ?? JSON.stringify(r)
         }));
 
@@ -778,8 +806,8 @@ function handleSpreadsheetUpload(req, res) {
         });
 
         res.json({
-          ok      : true,
-          count   : payload.length,
+          ok: true,
+          count: payload.length,
           doc_name: docName,
           document_id: documentId
         });
@@ -794,21 +822,15 @@ function handleSpreadsheetUpload(req, res) {
   }
 }
 
-// Original upload endpoint
 api.post('/admin/data/upload', handleSpreadsheetUpload);
-
-// Alias used by some admin pages (fixes 405 + JSON parse error)
 api.post('/admin/ingest', handleSpreadsheetUpload);
 
 // ──────────────────────────────────────────────────────────
-/** Admin: USERS (overview/add/delete/create code) */
+// Admin: USERS (overview/add/delete/create code)
 // ──────────────────────────────────────────────────────────
 async function usersOverviewHandler(_req, res) {
   try {
-    // users
     const users = await supabaseRest(`/users?select=email,role&order=email.asc`);
-
-    // latest codes by email for members and admins
     const memberCodes = await supabaseRest(`/login_codes?select=email,code,created_at&order=created_at.desc`);
     const adminCodes  = await supabaseRest(`/admin_login_codes?select=email,code,created_at&order=created_at.desc`);
 
@@ -817,6 +839,7 @@ async function usersOverviewHandler(_req, res) {
       const k = (c.email || '').toLowerCase();
       if (k && !latestMember.has(k)) latestMember.set(k, { code: c.code, created_at: c.created_at });
     }
+
     const latestAdmin = new Map();
     for (const c of adminCodes) {
       const k = (c.email || '').toLowerCase();
@@ -840,7 +863,6 @@ async function usersOverviewHandler(_req, res) {
     res.status(500).json({ ok: false, error: e.message || String(e) });
   }
 }
-// Support BOTH forms: /admin/users-overview and /admin/users_overview
 api.get(/^\/admin\/users[-_]overview$/, usersOverviewHandler);
 
 api.post('/admin/users', async (req, res) => {
@@ -848,7 +870,11 @@ api.post('/admin/users', async (req, res) => {
     const email = String(req.body?.email || '').trim();
     const role = String(req.body?.role || 'member').trim();
     if (!email) return res.status(400).json({ ok: false, error: 'Missing email' });
-    const up = await supabaseRest(`/users`, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: [{ email, role }] });
+    const up = await supabaseRest(`/users`, {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: [{ email, role }]
+    });
     res.json({ ok: true, user: up?.[0] || { email, role } });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -867,7 +893,6 @@ api.post('/admin/users/:email/codes', async (req, res) => {
     const email = decodeURIComponent(req.params.email || '').trim();
     if (!email) return res.status(400).json({ ok: false, error: 'Missing email' });
 
-    // find user & role to pick the right table
     const users = await supabaseRest(`/users?select=email,role&email=ilike.${encodeURIComponent(email)}&limit=1`);
     if (!Array.isArray(users) || users.length === 0) return res.status(404).json({ ok: false, error: 'User not found' });
     const role = (users[0].role || 'member').toLowerCase();
