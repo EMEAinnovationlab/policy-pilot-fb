@@ -3,13 +3,13 @@ import { renderAssistantHeader, getOrCreateContentContainer } from './strapline.
 import { renderMarkdownAndFadeNew } from './markdown.js';
 
 export function createChatController({
-  dom,        // { chat, input, sendBtn, stopBtn, clearBtn, useDbToggle? }
-  examples,   // { closeExamples }
-  config      // { STRAPLINE, DEFAULT_WELCOME_PROMPT }
+  dom,        // { chat, input, sendBtn, stopBtn, clearBtn }
+  examples,   // { closeExamples, openExamples }
+  config,     // { STRAPLINE, DEFAULT_WELCOME_PROMPT }
+  getUseRetrieval
 }) {
   let controller = null;
 
-  // --- util DOM helpers
   function append(role, html = '') {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
@@ -21,18 +21,14 @@ export function createChatController({
   const show = el => el && el.classList.remove('hide');
   const hide = el => el && el.classList.add('hide');
 
-  // --- controls / spinner
   function setButtonsStreaming(isStreaming) {
     if (isStreaming) {
       if (dom.sendBtn) { dom.sendBtn.disabled = true; dom.sendBtn.style.opacity = '0.6'; dom.sendBtn.style.cursor = 'not-allowed'; }
       if (dom.input) { dom.input.disabled = true; dom.input.setAttribute('aria-busy', 'true'); }
-      // Optional: lock toggle while streaming to avoid mismatch
-      if (dom.useDbToggle) dom.useDbToggle.disabled = true;
       show(dom.stopBtn);
     } else {
       if (dom.sendBtn) { dom.sendBtn.disabled = false; dom.sendBtn.style.opacity = '1'; dom.sendBtn.style.cursor = 'pointer'; }
       if (dom.input) { dom.input.disabled = false; dom.input.removeAttribute('aria-busy'); }
-      if (dom.useDbToggle) dom.useDbToggle.disabled = false;
       hide(dom.stopBtn);
     }
   }
@@ -64,17 +60,13 @@ export function createChatController({
     dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
   }
 
-  // Helper: read toggle safely
-  function getUseRetrievalFlag() {
-    // Default: false if toggle missing
-    return !!dom.useDbToggle?.checked;
-  }
-
-  // --- main streaming flow (spinner -> strapline -> content)
   async function streamAssistantFromPrompt(
     prompt,
-    { echoUser = true, closeExamplesOnStart = true, straplineText, useRetrieval = false } = {}
+    { echoUser = true, closeExamplesOnStart = true, straplineText } = {}
   ) {
+    // ✅ Capture retrieval state BEFORE we possibly close examples
+    const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
+
     if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
 
     if (echoUser) {
@@ -99,8 +91,8 @@ export function createChatController({
       const resp = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // 👇 NEW: include useRetrieval flag
-        body: JSON.stringify({ message: prompt, useRetrieval }),
+        // ✅ Send toggle state
+        body: JSON.stringify({ message: prompt, useRetrieval: useRetrievalForThisRequest }),
         signal: controller.signal
       });
 
@@ -162,8 +154,6 @@ export function createChatController({
               err.textContent = `[Error] ${evt.message}`;
               assistantDiv.appendChild(err);
             }
-
-            // NOTE: evt.type === 'sources' intentionally ignored (we don't render sources)
           } catch {
             // ignore parse errors
           }
@@ -190,14 +180,7 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-
-    const useRetrieval = getUseRetrievalFlag();
-
-    await streamAssistantFromPrompt(text, {
-      echoUser: true,
-      closeExamplesOnStart: true,
-      useRetrieval
-    });
+    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true });
   }
 
   return {

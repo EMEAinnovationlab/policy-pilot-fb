@@ -73,6 +73,9 @@ const closeExamplesBtn = document.getElementById('close-examples');
 const exampleCards = document.querySelectorAll('.example');
 const examplesToggle = document.getElementById('toggle-examples');
 
+// DB toggle
+const useDbToggle = document.getElementById('use-db');
+
 // Carousel controls (must exist in your HTML)
 const examplesPrevBtn = document.getElementById('examples-prev');
 const examplesNextBtn = document.getElementById('examples-next');
@@ -95,20 +98,51 @@ injectStraplineStyles({
 });
 
 // ──────────────────────────────────────────────────────────
-/** Examples helpers bound with our DOM */
-const examples = {
-  openExamples: () => openExamples(examplesContainer, examplesToggle),
-  closeExamples: (opts) => closeExamples(examplesContainer, examplesToggle, opts)
+// ✅ Retrieval rule:
+// - If examples panel is OPEN → retrieval ON
+// - If examples panel is CLOSED → retrieval follows the checkbox (#use-db)
+// Also sync the checkbox when examples open/close so UI matches behavior.
+// ──────────────────────────────────────────────────────────
+const isExamplesOpen = () =>
+  !!examplesContainer && !examplesContainer.classList.contains('hide');
+
+const getUseRetrieval = () => {
+  // Examples open forces retrieval on
+  if (isExamplesOpen()) return true;
+  // Otherwise it follows the checkbox
+  return !!useDbToggle?.checked;
 };
 
 // ──────────────────────────────────────────────────────────
-/** Chat controller */
-const useDbToggle = document.getElementById('use-db');
+/** Examples helpers bound with our DOM (wrapped for checkbox sync) */
+const examples = {
+  openExamples: () => {
+    openExamples(examplesContainer, examplesToggle);
+    if (useDbToggle) useDbToggle.checked = true;
+  },
+  closeExamples: (opts) => {
+    closeExamples(examplesContainer, examplesToggle, opts);
+    if (useDbToggle) useDbToggle.checked = false;
+  }
+};
 
+// If user manually turns checkbox on, keep examples closed (optional).
+// If user turns checkbox off while examples are open, we close examples (so behavior matches UI).
+if (useDbToggle) {
+  useDbToggle.addEventListener('change', () => {
+    if (!useDbToggle.checked && isExamplesOpen()) {
+      examples.closeExamples({ animate: true, scroll: false });
+    }
+  });
+}
+
+// ──────────────────────────────────────────────────────────
+/** Chat controller */
 const controller = createChatController({
-  dom: { chat, input, sendBtn, stopBtn, clearBtn, useDbToggle },
+  dom: { chat, input, sendBtn, stopBtn, clearBtn },
   examples,
-  config: { STRAPLINE, DEFAULT_WELCOME_PROMPT }
+  config: { STRAPLINE, DEFAULT_WELCOME_PROMPT },
+  getUseRetrieval
 });
 
 // Attach example fill handlers present at load
@@ -122,14 +156,16 @@ attachExampleFillHandlers({
 // Buttons / inputs
 if (sendBtn) sendBtn.addEventListener('click', controller.sendMessage);
 if (stopBtn) stopBtn.addEventListener('click', () => { /* Abort handled in chatFlow */ });
+
 if (clearBtn) {
   clearBtn.addEventListener('click', () => {
     if (chat) chat.innerHTML = '';
     controller.resetTextareaHeight();
-    examples.openExamples();
+    examples.openExamples(); // also forces retrieval ON via wrapper
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   });
 }
+
 if (input) {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -146,12 +182,14 @@ if (input) {
 // Keep examples visible on load if chat is empty
 (function maybeShowExamples() {
   if (!examplesContainer || !chat) return;
-  if (chat.children.length === 0) examples.openExamples();
+  if (chat.children.length === 0) examples.openExamples(); // also sets checkbox ON
 })();
 
 if (examplesToggle && examplesContainer) {
-  const isOpen = !examplesContainer.classList.contains('hide');
-  examplesToggle.classList.toggle('hide', isOpen);
+  const open = !examplesContainer.classList.contains('hide');
+  examplesToggle.classList.toggle('hide', open);
+  // keep checkbox synced on boot
+  if (useDbToggle) useDbToggle.checked = open ? true : !!useDbToggle.checked;
 }
 
 if (closeExamplesBtn) {
@@ -184,7 +222,6 @@ const modalTitle = document.getElementById('pp-modal-title');
 const modalContent = document.getElementById('pp-modal-content');
 
 const titles = { about: 'Over Poli Pilot', how: 'Hoe het werkt', data: 'Data' };
-// Use route tokens for keyboard cycling
 const pagesOrder = ['about', 'how', 'data'];
 
 function setModalOpen(open) {
@@ -202,7 +239,6 @@ modal?.addEventListener('click', (e) => {
 });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-// Top-left hero nav (tabs)
 const navContainer = document.querySelector('.pp-modal__nav');
 const navButtons   = Array.from(document.querySelectorAll('.pp-modal__nav .pp-navbtn'));
 
@@ -224,7 +260,6 @@ navContainer?.addEventListener('click', (e) => {
   loadSitePage(page);
 });
 
-// Keyboard: Left/Right to switch tabs when modal is open
 window.addEventListener('keydown', (e) => {
   if (modal?.getAttribute('aria-hidden') === 'true') return;
   if (!['ArrowLeft','ArrowRight'].includes(e.key)) return;
@@ -238,7 +273,6 @@ window.addEventListener('keydown', (e) => {
   loadSitePage(page);
 });
 
-// Included Data table renderer
 function renderIncludedDataTable(rows) {
   if (!rows || rows.length === 0) return '<p class="muted">No documents found.</p>';
   const body = rows.map(r => `
@@ -255,7 +289,6 @@ function renderIncludedDataTable(rows) {
   `;
 }
 
-// Unified loader via /api routes
 async function loadSitePage(page) {
   const lang = (navigator.language || 'en').toLowerCase();
 
@@ -290,7 +323,6 @@ async function loadSitePage(page) {
   }
 }
 
-// Link hooks + deep linking
 const linkAbout = document.querySelector('a[href="#about"]');
 const linkHow   = document.querySelector('a[href="#how"]');
 const linkData  = document.querySelector('a[href="#data"]');
@@ -313,7 +345,6 @@ function setupExamplesCarousel() {
   const grid = document.getElementById('examples-grid');
   if (!grid) return;
 
-  // Buttons are optional; carousel still works via swipe/trackpad
   const prevBtn = examplesPrevBtn;
   const nextBtn = examplesNextBtn;
   const dotsEl  = examplesDotsEl;
@@ -363,8 +394,6 @@ function setupExamplesCarousel() {
 
     buildDots();
     updateButtonsAndDots();
-
-    // Snap (no animation) after recompute so it stays aligned
     scrollToIndex('auto');
   };
 
@@ -373,14 +402,12 @@ function setupExamplesCarousel() {
     scrollToIndex('smooth');
   };
 
-  // Bind once
   if (!grid._carouselBound) {
     grid._carouselBound = true;
 
     if (prevBtn) prevBtn.addEventListener('click', () => go(state.index - 1));
     if (nextBtn) nextBtn.addEventListener('click', () => go(state.index + 1));
 
-    // Keep state aligned if user scrolls manually
     let t;
     grid.addEventListener('scroll', () => {
       clearTimeout(t);
@@ -394,9 +421,7 @@ function setupExamplesCarousel() {
       }, 80);
     });
 
-    window.addEventListener('resize', () => {
-      recompute();
-    });
+    window.addEventListener('resize', () => recompute());
   }
 
   recompute();
@@ -426,7 +451,6 @@ async function loadAndRenderExamplePrompts() {
 
       if (!full?.trim()) return '';
 
-      // Escape for attribute
       const fullAttr = full
         .replace(/&/g, '&amp;')
         .replace(/"/g, '&quot;')
@@ -449,7 +473,6 @@ async function loadAndRenderExamplePrompts() {
       closeExamplesFn: examples.closeExamples
     });
 
-    // Init carousel after cards exist
     setupExamplesCarousel();
   } catch (err) {
     console.error('Could not load example prompts:', err);
