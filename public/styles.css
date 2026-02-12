@@ -130,6 +130,9 @@ text-align: center;
 text-transform: uppercase;
 }
 
+.h4_small {
+  font-size: 10px;
+}
 
 
 .side_note {
@@ -1141,4 +1144,15 @@ cursor: pointer;
 /* mobile: 1 visible */
 @media (max-width: 640px) {
   .example { flex-basis: 100%; }
+}
+
+
+.request_button {
+  background-color: var(--Edelman-blue);
+  height: 50px;
+  color: var(--white);
+
+  border-radius: 20px 20px 0px 0px;
+  position: relative;
+  top: -50px;
 }
