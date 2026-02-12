@@ -1155,3 +1155,7 @@ cursor: pointer;
   position: relative;
   top: -50px;
 }
+
+.request_button h4 {
+  color: white;
+}
