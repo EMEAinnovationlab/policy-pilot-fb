@@ -400,11 +400,12 @@ button:hover { box-shadow: var(--shadow-subtle); }
 .example-prompts {
   padding: var(--space-6);
   margin: auto;
-  max-width: 820px;
+  max-width: 620px;
   background: var(--white-dark);
   position: relative;
   border-radius: var(--r-lg);
   min-height: 400px;
+  top: -300px;
 }
 .example-header {
   display: flex;
