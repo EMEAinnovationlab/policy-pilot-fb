@@ -150,7 +150,6 @@ attachExampleFillHandlers({
   exampleCards,
   input,
   autoGrowTextarea: controller.autoGrowTextarea,
-  closeExamplesFn: examples.closeExamples
 });
 
 // Buttons / inputs
@@ -470,7 +469,6 @@ async function loadAndRenderExamplePrompts() {
       exampleCards: cards,
       input,
       autoGrowTextarea: controller.autoGrowTextarea,
-      closeExamplesFn: examples.closeExamples
     });
 
     setupExamplesCarousel();
