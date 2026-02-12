@@ -73,6 +73,7 @@
 
     <div id="example-prompts" class="example-prompts hide">
   <div class="example-header">
+    <h1>Stel een vraag aan Policy Pilot over policies en trust.</h1>
     <h4>Voorbeeld vragen</h4>
     <button class="close-button" id="close-examples" aria-label="Close examples" type="button">
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -83,7 +84,25 @@
   </div>
 
   <!-- We’ll fill this via JS -->
-  <div class="examples-grid" id="examples-grid"></div>
+  <div class="examples-carousel">
+    
+  <div id="examples-grid" class="examples-grid">
+    <!-- cards injected here -->
+  </div>
+
+  <div class="examples-nav" aria-label="Example prompts navigation">
+    <button type="button" class="examples-nav-btn" id="examples-prev" aria-label="Previous examples">
+      ‹
+    </button>
+
+    <div class="examples-dots" id="examples-dots" aria-hidden="true"></div>
+
+    <button type="button" class="examples-nav-btn" id="examples-next" aria-label="Next examples">
+      ›
+    </button>
+  </div>
+</div>
+
 </div>
 
 

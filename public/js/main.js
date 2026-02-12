@@ -73,6 +73,11 @@ const closeExamplesBtn = document.getElementById('close-examples');
 const exampleCards = document.querySelectorAll('.example');
 const examplesToggle = document.getElementById('toggle-examples');
 
+// Carousel controls (must exist in your HTML)
+const examplesPrevBtn = document.getElementById('examples-prev');
+const examplesNextBtn = document.getElementById('examples-next');
+const examplesDotsEl  = document.getElementById('examples-dots');
+
 if (chat) {
   chat.setAttribute('role', 'log');
   chat.setAttribute('aria-live', 'polite');
@@ -302,6 +307,102 @@ window.addEventListener('popstate', routeFromHash);
 routeFromHash();
 
 // ──────────────────────────────────────────────────────────
+/** Examples carousel (2 visible) */
+// ──────────────────────────────────────────────────────────
+function setupExamplesCarousel() {
+  const grid = document.getElementById('examples-grid');
+  if (!grid) return;
+
+  // Buttons are optional; carousel still works via swipe/trackpad
+  const prevBtn = examplesPrevBtn;
+  const nextBtn = examplesNextBtn;
+  const dotsEl  = examplesDotsEl;
+
+  const state = (grid._carouselState ||= {
+    index: 0,
+    perPage: 2,
+    pages: 1
+  });
+
+  const getPerPage = () => (window.matchMedia('(max-width: 640px)').matches ? 1 : 2);
+
+  const updateButtonsAndDots = () => {
+    if (prevBtn) prevBtn.disabled = state.index <= 0;
+    if (nextBtn) nextBtn.disabled = state.index >= state.pages - 1;
+
+    if (!dotsEl) return;
+    const dots = dotsEl.querySelectorAll('.examples-dot');
+    dots.forEach((d, i) => d.classList.toggle('is-active', i === state.index));
+  };
+
+  const scrollToIndex = (behavior = 'smooth') => {
+    const x = state.index * grid.clientWidth;
+    grid.scrollTo({ left: x, behavior });
+    updateButtonsAndDots();
+  };
+
+  const buildDots = () => {
+    if (!dotsEl) return;
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < state.pages; i++) {
+      const d = document.createElement('span');
+      d.className = 'examples-dot' + (i === state.index ? ' is-active' : '');
+      d.addEventListener('click', () => {
+        state.index = i;
+        scrollToIndex('smooth');
+      });
+      dotsEl.appendChild(d);
+    }
+  };
+
+  const recompute = () => {
+    const cards = Array.from(grid.querySelectorAll('.example'));
+    state.perPage = getPerPage();
+    state.pages = Math.max(1, Math.ceil(cards.length / state.perPage));
+    state.index = Math.min(state.index, state.pages - 1);
+
+    buildDots();
+    updateButtonsAndDots();
+
+    // Snap (no animation) after recompute so it stays aligned
+    scrollToIndex('auto');
+  };
+
+  const go = (nextIndex) => {
+    state.index = Math.max(0, Math.min(state.pages - 1, nextIndex));
+    scrollToIndex('smooth');
+  };
+
+  // Bind once
+  if (!grid._carouselBound) {
+    grid._carouselBound = true;
+
+    if (prevBtn) prevBtn.addEventListener('click', () => go(state.index - 1));
+    if (nextBtn) nextBtn.addEventListener('click', () => go(state.index + 1));
+
+    // Keep state aligned if user scrolls manually
+    let t;
+    grid.addEventListener('scroll', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const w = Math.max(1, grid.clientWidth);
+        const idx = Math.round(grid.scrollLeft / w);
+        if (idx !== state.index) {
+          state.index = Math.max(0, Math.min(state.pages - 1, idx));
+          updateButtonsAndDots();
+        }
+      }, 80);
+    });
+
+    window.addEventListener('resize', () => {
+      recompute();
+    });
+  }
+
+  recompute();
+}
+
+// ──────────────────────────────────────────────────────────
 /** Load example prompts (public read via backend → Supabase) */
 // ──────────────────────────────────────────────────────────
 async function loadAndRenderExamplePrompts() {
@@ -324,8 +425,16 @@ async function loadAndRenderExamplePrompts() {
         : row.prompt_full_en || row.prompt_full_nl || '';
 
       if (!full?.trim()) return '';
+
+      // Escape for attribute
+      const fullAttr = full
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
       return `
-        <div class="example" data-prompt="${full.replace(/"/g, '&quot;')}">
+        <div class="example" data-prompt="${fullAttr}">
           <div class="example-title">${title || 'Example'}</div>
           <div class="example-text">${full}</div>
         </div>
@@ -339,9 +448,13 @@ async function loadAndRenderExamplePrompts() {
       autoGrowTextarea: controller.autoGrowTextarea,
       closeExamplesFn: examples.closeExamples
     });
+
+    // Init carousel after cards exist
+    setupExamplesCarousel();
   } catch (err) {
     console.error('Could not load example prompts:', err);
     grid.innerHTML = `<div class="muted">Couldn’t load example prompts.</div>`;
+    setupExamplesCarousel();
   }
 }
 await loadAndRenderExamplePrompts();
