@@ -505,14 +505,16 @@ button:hover { box-shadow: var(--shadow-subtle); }
   padding: 8px 12px;
   cursor: pointer;
 border-radius: 20px 20px 0px 0px;
-background: linear-gradient(0deg, var(--white, #FFFCF7) 23.53%, #FDF3E3 84.05%);
+/* background: linear-gradient(0deg, var(--white, #FFFCF7) 23.53%, #FDF3E3 84.05%); */
+background-color: var(--Edelman-blue);
 width: 172px;
 height: 36px;
 flex-shrink: 0;
 position: relative;
 top: 25px;
 
-  color: var(--donker, #966A21);
+  /* color: var(--donker, #966A21); */
+  color: var(--white);
 
 /* small strapline */
 font-family: "Open Sans";
