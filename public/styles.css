@@ -527,7 +527,7 @@ letter-spacing: 2.4px;
 text-transform: uppercase;
 }
 
-.examples-toggle:hover { background: var(--PublicMatters-blue)); }
+.examples-toggle:hover { background: var(--PublicMatters-blue); }
 
 
 

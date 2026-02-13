@@ -1,4 +1,4 @@
-// app.js — Poli Pilot (CSV/XLSX ingest + RAG streaming) — Vercel-ready (no app.listen)
+// app.js — Poli Pilot (CSV/XLSX ingest + RAG streaming + chat history) — Vercel-ready (no app.listen)
 require('dotenv').config();
 const crypto = require('crypto');
 const express = require('express');
@@ -210,7 +210,7 @@ User query:
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
       console.error('[expandQueryWithSynonyms] OpenAI error:', resp.status, txt);
-      return userMessage; // fallback
+      return userMessage;
     }
 
     const json = await resp.json();
@@ -221,7 +221,7 @@ User query:
     return enriched;
   } catch (e) {
     console.error('[expandQueryWithSynonyms] error:', e);
-    return userMessage; // fallback
+    return userMessage;
   }
 }
 
@@ -239,7 +239,7 @@ api.get('/health', (_, res) => res.json({ ok: true }));
 // Auth
 // ──────────────────────────────────────────────────────────
 
-// Admin login (no 'enabled' column in admin_login_codes)
+// Admin login
 api.post('/auth/admin/verify', async (req, res) => {
   try {
     const email = (req.body?.email || '').trim();
@@ -357,6 +357,7 @@ api.get('/documents/list-raw', async (_req, res) => {
 
 // ──────────────────────────────────────────────────────────
 // Chat endpoint (SSE stream) — RAG gated by req.body.useRetrieval
+// ✅ NOW ALSO SUPPORTS req.body.history
 // ──────────────────────────────────────────────────────────
 api.post('/chat', async (req, res) => {
   try {
@@ -365,7 +366,12 @@ api.post('/chat', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Empty message' });
     }
 
-    // Frontend toggle (checkbox) controls whether we do RAG / vector calls.
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Missing OPENAI_API_KEY' });
+    }
+
+    // Frontend toggle controls whether we do RAG / vector calls.
+    // (Keeps your original behavior: OFF by default unless client sends true)
     const useRetrieval = !!req.body?.useRetrieval;
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -380,7 +386,7 @@ api.post('/chat', async (req, res) => {
     let contextBody = '(retrieval disabled)';
     let totalHits = 0, hitsPm = 0, hitsEd = 0;
 
-    // Small helper to call the Edge Function with an optional uploaded_by filter
+    // Helper to call the Edge Function with optional uploaded_by filter
     async function callRag(uploadedByLabel) {
       const body = {
         query          : expandedQuery,
@@ -397,7 +403,7 @@ api.post('/chat', async (req, res) => {
           ...(SUPABASE_API_KEY ? { apikey: SUPABASE_API_KEY } : {}),
           ...(SUPABASE_BEARER ? { Authorization: `Bearer ${SUPABASE_BEARER}` } : {})
         },
-        body   : JSON.stringify(body)
+        body: JSON.stringify(body)
       });
 
       if (!resp.ok) {
@@ -433,7 +439,7 @@ api.post('/chat', async (req, res) => {
         ...(ed.matches || []).map(m => ({ ...m, uploaded_by: m.uploaded_by || 'Edelman' }))
       ];
 
-      // Full debug logging of ALL RAG matches with full snippet text
+      // Debug logging of ALL matches
       console.log('────────────────────────────────────────────');
       console.log('RAG DEBUG: total matches:', allMatches.length);
       console.log('PM matches:', (pm.matches || []).length, ' | ED matches:', (ed.matches || []).length);
@@ -455,7 +461,6 @@ api.post('/chat', async (req, res) => {
         console.log('────────────────────────────────────────────');
       });
 
-      // If the function is down / misconfigured, surface that visibly
       if ((pm.error && !pm.matches.length) && (ed.error && !ed.matches.length)) {
         sse(res, { type: 'error', message: 'RAG backend (query-docs) is not responding or misconfigured.' });
       }
@@ -465,7 +470,6 @@ api.post('/chat', async (req, res) => {
       let used = 0;
       const maxChars = 6000;
 
-      // Build nice, tagged context blocks
       for (const [i, m] of allMatches.entries()) {
         const src  = (m.uploaded_by || '').toString().trim();
         const tag  = src.toLowerCase().includes('edelman') ? '🔵 Edelman' : '🔴 Public Matters';
@@ -501,15 +505,40 @@ api.post('/chat', async (req, res) => {
       contextBody = snippets.join('') || '(no relevant matches found)';
     }
 
-    // ✅ NEW: choose system prompt based on toggle
+    // Choose system prompt based on toggle
     const activeSystemPrompt = useRetrieval ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_RAG;
 
-    const messages = [
-      { role: 'system', content: activeSystemPrompt },
+    // ──────────────────────────────────────────────────────
+    // ✅ NEW: Include client-side chat history
+    // Correct order:
+    //   SYSTEM -> (RAG CONTEXT) -> HISTORY -> CURRENT USER
+    // ──────────────────────────────────────────────────────
+    const rawHistory = Array.isArray(req.body?.history) ? req.body.history : [];
+    const MAX_HISTORY_MESSAGES = Number(process.env.CHAT_MAX_HISTORY_MESSAGES || 24);
 
-      ...(useRetrieval ? [{
-        role: 'system',
-        content: `
+    let safeHistory = rawHistory
+      .filter(m =>
+        m &&
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string' &&
+        m.content.trim()
+      )
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 8000) }));
+
+    // If client included current message already, remove it and re-add at end
+    while (safeHistory.length) {
+      const last = safeHistory[safeHistory.length - 1];
+      if (last.role === 'user' && last.content.trim() === userMessage.trim()) {
+        safeHistory.pop();
+        continue;
+      }
+      break;
+    }
+
+    const ragSystemMessages = useRetrieval ? [{
+      role: 'system',
+      content: `
 You have access to a vector database with documents from:
 - 🔴 Public Matters (policy, parties, issue papers)
 - 🔵 Edelman (Edelman Trust Barometer reports)
@@ -526,9 +555,13 @@ Use the CONTEXT below as your primary source of truth. If there are no relevant 
 
 CONTEXT DOCUMENT EXCERPTS:
 ${contextBody}
-        `.trim()
-      }] : []),
+      `.trim()
+    }] : [];
 
+    const messages = [
+      { role: 'system', content: activeSystemPrompt },
+      ...ragSystemMessages,
+      ...safeHistory,
       { role: 'user', content: userMessage }
     ];
 
@@ -640,7 +673,6 @@ api.patch('/admin/settings', async (req, res) => {
 
       if (row) {
         updated[row.setting_name] = row.setting_content;
-        // Keep in-memory prompts in sync
         if (row.setting_name === 'system_prompt') SYSTEM_PROMPT = String(row.setting_content ?? '').trim();
         if (row.setting_name === 'system_prompt_no_rag') SYSTEM_PROMPT_NO_RAG = String(row.setting_content ?? '').trim();
       }
