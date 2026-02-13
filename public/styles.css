@@ -112,7 +112,7 @@ h2 {
 .h2_styled {
     font-family: var(--font-serif);
   font-weight: 500;
-  font-size: 32px;
+  font-size: 48px;
   line-height: 1.1;
   color: var(--black);
 }
@@ -455,6 +455,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
   border-radius: 10px;
   background: #fff;
   justify-self: stretch;
+  min-height: 120px;
   
 }
 .example:hover { background: var(--white); }

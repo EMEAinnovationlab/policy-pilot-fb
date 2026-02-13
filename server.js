@@ -1,4 +1,4 @@
-// server.js — Poli Pilot (CSV/XLSX ingest + RAG streaming)
+// server.js — Poli Pilot (CSV/XLSX ingest + optional RAG + streaming + chat history)
 require('dotenv').config();
 const crypto = require('crypto');
 const express = require('express');
@@ -81,7 +81,6 @@ async function supabaseRest(path, { method='GET', body, headers={} } = {}) {
   if (method !== 'GET') {
     console.log(`[Supabase REST ${method}] ${url} -> ${r.status} OK`);
   }
-  // expose headers when needed (e.g., count via return=representation)
   return Object.assign(json ?? {}, { _headers: Object.fromEntries(r.headers.entries()) });
 }
 
@@ -162,7 +161,7 @@ function setCookie(res, name, value, opts = {}) {
     `SameSite=${sameSite}`,
   ];
   if (httpOnly) parts.push('HttpOnly');
-  if (secure) parts.push('Secure'); // ✅ fixed
+  if (secure) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 function clearCookie(res, name) {
@@ -273,66 +272,98 @@ function requireAdmin(req, res, next) {
   }
 }
 
-// ─── Chat endpoint (streaming) ─────────────────────────────
+// ───────────────────────────────────────────────────────────
+// Chat endpoint (streaming) — supports:
+// - useRetrieval: boolean (skip DB when false)
+// - history: [{role:'user'|'assistant', content:string}, ...] (client-side memory)
+// ───────────────────────────────────────────────────────────
 app.post('/chat', async (req, res) => {
   try {
     const userMessage = (req.body?.message || '').toString().slice(0, 8000);
     if (!userMessage) return res.status(400).json({ error: 'No message' });
 
+    // default ON unless explicitly false
+    const useRetrieval = req.body?.useRetrieval !== false;
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
 
-    const ragBody = {
-      query: userMessage,
-      match_count: Number(req.body?.match_count ?? RAG_DEFAULTS.match_count),
-      match_threshold: Number(req.body?.match_threshold ?? RAG_DEFAULTS.match_threshold),
-      search_mode: req.body?.search_mode ?? RAG_DEFAULTS.search_mode,
-      ...(RAG_DEFAULTS.uploaded_by ? { uploaded_by: RAG_DEFAULTS.uploaded_by } : {}),
-    };
+    // ── Build optional RAG context ──────────────────────────
+    let sources = [];
+    let contextText = '';
 
-    const ragResp = await fetch(`${SUPABASE_FUNCTIONS_URL}/query-docs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(SUPABASE_API_KEY ? { 'apikey': SUPABASE_API_KEY } : {}),
-        ...(SUPABASE_BEARER ? { 'Authorization': `Bearer ${SUPABASE_BEARER}` } : {}),
-      },
-      body: JSON.stringify(ragBody),
-    });
+    if (useRetrieval) {
+      const ragBody = {
+        query: userMessage,
+        match_count: Number(req.body?.match_count ?? RAG_DEFAULTS.match_count),
+        match_threshold: Number(req.body?.match_threshold ?? RAG_DEFAULTS.match_threshold),
+        search_mode: req.body?.search_mode ?? RAG_DEFAULTS.search_mode,
+        ...(RAG_DEFAULTS.uploaded_by ? { uploaded_by: RAG_DEFAULTS.uploaded_by } : {}),
+      };
 
-    if (!ragResp.ok) {
-      const txt = await ragResp.text().catch(() => '');
-      sse(res, { type: 'error', message: `RAG query failed: ${ragResp.status} ${txt}` });
-      sse(res, { type: 'done' });
-      return res.end();
+      const ragResp = await fetch(`${SUPABASE_FUNCTIONS_URL}/query-docs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(SUPABASE_API_KEY ? { 'apikey': SUPABASE_API_KEY } : {}),
+          ...(SUPABASE_BEARER ? { 'Authorization': `Bearer ${SUPABASE_BEARER}` } : {}),
+        },
+        body: JSON.stringify(ragBody),
+      });
+
+      if (!ragResp.ok) {
+        const txt = await ragResp.text().catch(() => '');
+        sse(res, { type: 'error', message: `RAG query failed: ${ragResp.status} ${txt}` });
+        sse(res, { type: 'done' });
+        return res.end();
+      }
+
+      const ragData = await ragResp.json();
+      const matches = Array.isArray(ragData?.matches) ? ragData.matches : [];
+
+      const maxChars = 6000;
+      let used = 0;
+      const snippets = [];
+
+      matches.forEach((m, i) => {
+        const title = m.doc_name || m.bron || `Bron #${i + 1}`;
+        const url = m.link || null;
+        const snippet = (m.invloed_text || m.content || '').toString().trim().replace(/\s+/g, ' ');
+        const block = `[#${i + 1}] ${title}${url ? ` (${url})` : ''}\n${snippet}\n---\n`;
+        if (used + block.length <= maxChars) {
+          snippets.push(block);
+          used += block.length;
+          sources.push({ n: i + 1, title, url });
+        }
+      });
+
+      contextText = snippets.join('');
     }
 
-    const ragData = await ragResp.json();
-    const matches = Array.isArray(ragData?.matches) ? ragData.matches : [];
+    // ── Build message list (system + optional history) ──────
+    // NOTE: We trust client history only as conversational context (not auth).
+    const rawHistory = Array.isArray(req.body?.history) ? req.body.history : [];
 
-    const maxChars = 6000;
-    let used = 0;
-    const snippets = [];
-    const sources = [];
+    // Basic sanitize + clamp: keep last N turns and clamp each content
+    const MAX_HISTORY_MESSAGES = Number(process.env.CHAT_MAX_HISTORY_MESSAGES || 24);
+    const safeHistory = rawHistory
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
-    matches.forEach((m, i) => {
-      const title = m.doc_name || m.bron || `Bron #${i + 1}`;
-      const url = m.link || null;
-      const snippet = (m.invloed_text || m.content || '').toString().trim().replace(/\s+/g, ' ');
-      const block = `[#${i + 1}] ${title}${url ? ` (${url})` : ''}\n${snippet}\n---\n`;
-      if (used + block.length <= maxChars) {
-        snippets.push(block);
-        used += block.length;
-        sources.push({ n: i + 1, title, url });
-      }
-    });
+    // Ensure the latest userMessage is present (in case client history excludes it)
+    const last = safeHistory[safeHistory.length - 1];
+    const historyIncludesLatestUser =
+      last && last.role === 'user' && last.content.trim() === userMessage.trim();
 
-    const contextText = snippets.join('');
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userMessage },
-      { role: 'system', content: `CONTEXT:\n${contextText || '(no relevant matches found)'}` },
+      ...safeHistory,
+      ...(!historyIncludesLatestUser ? [{ role: 'user', content: userMessage }] : []),
+      ...(useRetrieval
+        ? [{ role: 'system', content: `CONTEXT:\n${contextText || '(no relevant matches found)'}` }]
+        : [])
     ];
 
     const body = { model: OPENAI_MODEL, stream: true, temperature: 0.2, messages };
@@ -367,7 +398,8 @@ app.post('/chat', async (req, res) => {
         const payload = trimmed.slice(5).trim();
 
         if (payload === '[DONE]') {
-          sse(res, { type: 'sources', items: sources });
+          // Only emit sources if retrieval was used; otherwise send empty list (keeps UI stable)
+          sse(res, { type: 'sources', items: useRetrieval ? sources : [] });
           sse(res, { type: 'done' });
           return res.end();
         }
@@ -380,7 +412,7 @@ app.post('/chat', async (req, res) => {
       }
     }
 
-    sse(res, { type: 'sources', items: sources });
+    sse(res, { type: 'sources', items: useRetrieval ? sources : [] });
     sse(res, { type: 'done' });
     res.end();
   } catch (err) {
@@ -406,7 +438,9 @@ app.get('/site-content', async (req, res) => {
     }
 
     const row = rows[0];
-    const content = lang === 'nl' ? (row.page_text_nl || row.page_text_en || '') : (row.page_text_en || row.page_text_nl || '');
+    const content = lang === 'nl'
+      ? (row.page_text_nl || row.page_text_en || '')
+      : (row.page_text_en || row.page_text_nl || '');
     res.json({ ok: true, page: row.page, lang, content });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err.message || err) });
@@ -463,7 +497,6 @@ app.get('/documents/list-raw', requireAdmin, async (req, res) => {
 });
 
 // ─── Documents: delete by doc_name (single & bulk) ─────────
-// Bulk: { "doc_names": ["Doc A", "Doc B"] }
 app.delete('/documents', requireAdmin, async (req, res) => {
   try {
     const docNames = Array.isArray(req.body?.doc_names) ? req.body.doc_names : [];
@@ -473,7 +506,6 @@ app.delete('/documents', requireAdmin, async (req, res) => {
     for (const raw of docNames) {
       const name = String(raw || '').trim();
       if (!name) continue;
-      // Prefer returning representation so we can count rows
       const out = await supabaseRest(
         `/documents?doc_name=eq.${encodeURIComponent(name)}`,
         { method: 'DELETE', headers: { Prefer: 'return=representation' } }
@@ -486,7 +518,6 @@ app.delete('/documents', requireAdmin, async (req, res) => {
   }
 });
 
-// Single: path param
 app.delete('/documents/:doc_name', requireAdmin, async (req, res) => {
   try {
     const name = decodeURIComponent(req.params.doc_name || '').trim();
@@ -546,6 +577,7 @@ app.post('/admin/example-prompts', requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
+
 app.patch('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -563,6 +595,7 @@ app.patch('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
+
 app.delete('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -589,6 +622,7 @@ app.get('/admin/settings', requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
+
 app.patch('/admin/settings', requireAdmin, async (req, res) => {
   try {
     const updates = req.body || {};
@@ -615,6 +649,7 @@ app.patch('/admin/settings', requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
+
 app.post('/admin/reload-system-prompt', requireAdmin, async (req, res) => {
   try {
     const ok = await fetchSystemPromptFromDB();
@@ -679,7 +714,6 @@ function readSpreadsheetFile(filename, buffer) {
 }
 
 function normalizeRowFromSheet(row) {
-  // Intentionally DO NOT read doc_name or uploaded_by from the sheet.
   const get = (k) => row[k] ?? row[k?.toLowerCase?.()] ?? row[k?.toUpperCase?.()];
   const datum = (get('datum') || '').toString();
   const naam = (get('naam') || '').toString();
@@ -754,7 +788,7 @@ app.post('/admin/ingest', requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'No rows found in spreadsheet' });
     }
 
-    // 2) Normalize rows to expected shape (NO doc_name / uploaded_by taken from sheet)
+    // 2) Normalize rows to expected shape
     let normalized = rawRows.map(r => {
       const core = normalizeRowFromSheet(r);
       return {
@@ -764,7 +798,7 @@ app.post('/admin/ingest', requireAdmin, async (req, res) => {
       };
     });
 
-    // 3) Resolve document_id once (single doc per upload)
+    // 3) Resolve document_id once
     const reuseId = await getExistingDocumentIdForDocName(input_doc_name);
     const document_id = reuseId || (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
 
@@ -845,7 +879,6 @@ app.post('/admin/ingest', requireAdmin, async (req, res) => {
 });
 
 // ─── Admin: Users & Login Codes overview ──────────────────
-// Requires the SQL view: public.user_login_overview (see earlier step)
 app.get('/api/admin/users_overview', requireAdmin, async (req, res) => {
   try {
     const rows = await supabaseRest(
@@ -858,15 +891,7 @@ app.get('/api/admin/users_overview', requireAdmin, async (req, res) => {
   }
 });
 
-
-// ─── Admin: Create/Update user, Delete user ─────────────────────────────
-/**
- * POST /admin/users
- * Body: { email: string, role: 'member' | 'admin' }
- * - If user exists → update role
- * - Else → insert new user
- * Your DB trigger will auto-create the proper login code.
- */
+// ─── Admin: Create/Update user, Delete user ────────────────
 app.post('/admin/users', requireAdmin, async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -878,10 +903,8 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Role must be 'member' or 'admin'" });
     }
 
-    // Check if user exists
     const existing = await supabaseRest(`/users?select=email,role&email=eq.${encodeURIComponent(email)}&limit=1`);
     if (Array.isArray(existing) && existing.length) {
-      // Update role
       const out = await supabaseRest(`/users?email=eq.${encodeURIComponent(email)}`, {
         method: 'PATCH',
         headers: { Prefer: 'return=representation' },
@@ -889,7 +912,6 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
       });
       return res.json({ ok: true, mode: 'updated', user: Array.isArray(out) ? out[0] : out });
     } else {
-      // Insert new
       const out = await supabaseRest(`/users`, {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
@@ -902,17 +924,11 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
-/**
- * DELETE /admin/users/:email
- * - Removes codes in both tables for that email
- * - Removes the user
- */
 app.delete('/admin/users/:email', requireAdmin, async (req, res) => {
   try {
     const email = String(decodeURIComponent(req.params.email || '')).trim().toLowerCase();
     if (!email) return res.status(400).json({ ok: false, error: 'Missing email' });
 
-    // Clean up codes first (safe even if none exist)
     await supabaseRest(`/login_codes?email=eq.${encodeURIComponent(email)}`, {
       method: 'DELETE',
       headers: { Prefer: 'return=representation' }
@@ -923,7 +939,6 @@ app.delete('/admin/users/:email', requireAdmin, async (req, res) => {
       headers: { Prefer: 'return=representation' }
     }).catch(() => {});
 
-    // Delete user
     const del = await supabaseRest(`/users?email=eq.${encodeURIComponent(email)}`, {
       method: 'DELETE',
       headers: { Prefer: 'return=representation' }
@@ -935,7 +950,6 @@ app.delete('/admin/users/:email', requireAdmin, async (req, res) => {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
-
 
 // ─── Diagnostics (admin-only) ──────────────────────────────
 app.get('/admin/debug/env', requireAdmin, (req, res) => {

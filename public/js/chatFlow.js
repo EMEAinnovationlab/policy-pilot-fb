@@ -1,6 +1,7 @@
 // chatFlow.js
 import { renderAssistantHeader, getOrCreateContentContainer } from './strapline.js';
 import { renderMarkdownAndFadeNew } from './markdown.js';
+let conversation = [];
 
 export function createChatController({
   dom,        // { chat, input, sendBtn, stopBtn, clearBtn }
@@ -72,7 +73,17 @@ export function createChatController({
     if (echoUser) {
       append('user', marked.parse(prompt));
       resetTextareaHeight();
+      conversation.push({ role: 'user', content: prompt });
+
     }
+
+    if (assistantDiv._rawTextBuffer) {
+  conversation.push({
+    role: 'assistant',
+    content: assistantDiv._rawTextBuffer
+  });
+}
+
 
     const assistantDiv = append('assistant', '');
     assistantDiv.classList.add('initializing');
@@ -92,7 +103,11 @@ export function createChatController({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // ✅ Send toggle state
-        body: JSON.stringify({ message: prompt, useRetrieval: useRetrievalForThisRequest }),
+        body: JSON.stringify({
+          message: prompt,
+          history: conversation,
+          useRetrieval: useRetrievalForThisRequest
+        }),
         signal: controller.signal
       });
 
