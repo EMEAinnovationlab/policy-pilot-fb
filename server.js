@@ -1,4 +1,6 @@
 // server.js — Poli Pilot (CSV/XLSX ingest + optional RAG + streaming + chat history)
+// NOTE: This file assumes Node 18+ (global fetch).
+
 require('dotenv').config();
 const crypto = require('crypto');
 const express = require('express');
@@ -13,22 +15,28 @@ const OpenAI = require('openai');
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Static assets (adjust if your static root differs)
 app.use(express.static('public'));
 
-// ─── Load env ──────────────────────────────────────────────
+// ─── Env ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'text-embedding-3-small';
 const DRY_RUN_EMBEDDINGS = String(process.env.DRY_RUN_EMBEDDINGS || '') === '1';
 
 const SUPABASE_FUNCTIONS_URL = (process.env.SUPABASE_FUNCTIONS_URL || '').replace(/\/$/, '');
-const SUPABASE_API_KEY = process.env.SUPABASE_API_KEY || ''; // anon key → sent as "apikey"
-const SUPABASE_BEARER = process.env.SUPABASE_BEARER || '';   // service_role key → "Authorization: Bearer ..."
-let   SUPABASE_REST_URL = process.env.SUPABASE_REST_URL || '';
+const SUPABASE_API_KEY = process.env.SUPABASE_API_KEY || ''; // anon key → "apikey"
+const SUPABASE_BEARER = process.env.SUPABASE_BEARER || '';   // service_role → "Authorization: Bearer ..."
+let SUPABASE_REST_URL = process.env.SUPABASE_REST_URL || '';
+
 if (!SUPABASE_REST_URL && SUPABASE_FUNCTIONS_URL) {
   try {
     const u = new URL(SUPABASE_FUNCTIONS_URL);
+    // supabase edge functions: https://<proj>.functions.supabase.co
+    // rest:            https://<proj>.supabase.co/rest/v1
     u.hostname = u.hostname.replace('.functions.', '.supabase.');
     u.pathname = '/rest/v1';
     u.search = '';
@@ -48,11 +56,10 @@ const RAG_DEFAULTS = {
 console.log('🔧 REST :', SUPABASE_REST_URL);
 console.log('🔧 FXN  :', SUPABASE_FUNCTIONS_URL);
 
-// ─── Load system prompt from Supabase (no file fallback) ─────────────────────
+// ─── System prompt loaded from Supabase ────────────────────
 let SYSTEM_PROMPT = `You are Poli Pilot, a concise assistant. Cite sources inline like [#n].`;
 
-// Supabase REST helper (adds profile headers + logging)
-async function supabaseRest(path, { method='GET', body, headers={} } = {}) {
+async function supabaseRest(path, { method = 'GET', body, headers = {} } = {}) {
   if (!SUPABASE_REST_URL) throw new Error('Missing SUPABASE_REST_URL');
 
   const url = `${SUPABASE_REST_URL}${path}`;
@@ -72,19 +79,21 @@ async function supabaseRest(path, { method='GET', body, headers={} } = {}) {
   });
 
   const text = await r.text();
-  let json; try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  let json;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = text;
+  }
 
   if (!r.ok) {
     console.error(`[Supabase REST ${method}] ${url} -> ${r.status}`, json);
-    throw new Error(`${r.status} ${JSON.stringify(json)}`);
+    throw new Error(`${r.status} ${typeof json === 'string' ? json : JSON.stringify(json)}`);
   }
-  if (method !== 'GET') {
-    console.log(`[Supabase REST ${method}] ${url} -> ${r.status} OK`);
-  }
-  return Object.assign(json ?? {}, { _headers: Object.fromEntries(r.headers.entries()) });
+
+  return json;
 }
 
-// Pull system prompt from DB: public.project_settings(setting_name='system_prompt')
 async function fetchSystemPromptFromDB() {
   try {
     const rows = await supabaseRest(
@@ -97,53 +106,82 @@ async function fetchSystemPromptFromDB() {
       SYSTEM_PROMPT = content;
       console.log(`🧠 Loaded system prompt from DB (${SYSTEM_PROMPT.length} chars)`);
       return true;
-    } else {
-      console.warn('⚠️ DB system prompt empty; keeping current in-memory default.');
-      return false;
     }
+    console.warn('⚠️ system_prompt empty in DB; keeping current default.');
+    return false;
   } catch (e) {
-    console.warn('⚠️ Could not fetch system prompt from DB:', e.message || e);
+    console.warn('⚠️ Could not fetch system prompt from DB:', e?.message || e);
     return false;
   }
 }
 
-async function initSystemPrompt() {
+// initial load + periodic refresh
+(async function initSystemPrompt() {
   await fetchSystemPromptFromDB();
   const intervalMs = Number(process.env.SETTINGS_REFRESH_MS || 60000);
   setInterval(fetchSystemPromptFromDB, intervalMs);
-}
-initSystemPrompt();
+})();
 
 // ─── Helpers ───────────────────────────────────────────────
-function sse(res, obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
+function sse(res, obj) {
+  res.write(`data: ${JSON.stringify(obj)}\n\n`);
+}
 
 function base64url(input) {
-  return Buffer.from(input).toString('base64')
-    .replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return Buffer.from(input)
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
 }
+
 function signJwt(payload, secret, expiresSec = 60 * 60 * 24 * 7) {
   const header = { alg: 'HS256', typ: 'JWT' };
-  const now = Math.floor(Date.now()/1000);
+  const now = Math.floor(Date.now() / 1000);
   const body = { iat: now, exp: now + expiresSec, ...payload };
   const h = base64url(JSON.stringify(header));
   const p = base64url(JSON.stringify(body));
   const data = `${h}.${p}`;
-  const sig = crypto.createHmac('sha256', secret).update(data).digest('base64')
-    .replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+  const sig = crypto
+    .createHmac('sha256', secret)
+    .update(data)
+    .digest('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
   return `${data}.${sig}`;
 }
+
 function verifyJwt(token, secret) {
   try {
-    const [h,p,sig] = token.split('.');
+    const [h, p, sig] = token.split('.');
     const data = `${h}.${p}`;
-    const expected = crypto.createHmac('sha256', secret).update(data).digest('base64')
-      .replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(data)
+      .digest('base64')
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
     if (expected !== sig) return null;
     const payload = JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-    if (payload.exp && Math.floor(Date.now()/1000) > payload.exp) return null;
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
     return payload;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
+
+function parseCookies(req) {
+  const h = req.headers.cookie || '';
+  return h.split(';').reduce((acc, kv) => {
+    const [k, ...v] = kv.trim().split('=');
+    if (!k) return acc;
+    acc[k] = decodeURIComponent(v.join('='));
+    return acc;
+  }, {});
+}
+
 function setCookie(res, name, value, opts = {}) {
   const isProd = process.env.NODE_ENV === 'production';
   const {
@@ -151,7 +189,7 @@ function setCookie(res, name, value, opts = {}) {
     secure = isProd,
     sameSite = 'Strict',
     path = '/',
-    maxAge = 60*60*24*7 // 7d
+    maxAge = 60 * 60 * 24 * 7, // 7d
   } = opts;
 
   const parts = [
@@ -164,27 +202,41 @@ function setCookie(res, name, value, opts = {}) {
   if (secure) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
+
 function clearCookie(res, name) {
   res.setHeader('Set-Cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict`);
 }
-function parseCookies(req) {
-  const h = req.headers.cookie || '';
-  return h.split(';').reduce((acc, kv) => {
-    const [k, ...v] = kv.trim().split('=');
-    if (!k) return acc;
-    acc[k] = decodeURIComponent(v.join('='));
-    return acc;
-  }, {});
+
+function requireAdmin(req, res, next) {
+  const cookies = parseCookies(req);
+  const token = cookies.pp_session;
+  const payload = token ? verifyJwt(token, APP_JWT_SECRET) : null;
+  if (!payload || payload.role !== 'admin') {
+    return res.status(401).json({ ok: false, error: 'Admin only' });
+  }
+  next();
 }
 
 // ─── Health ───────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true }));
 
-// ─── Auth: Manual-code (single use) ───────────────────────
+// ─── Friendly routes used in HTML links ────────────────────
+app.get('/new', (req, res) => {
+  // Your UI uses client-side clearing; server has no persisted conversation.
+  res.redirect('/');
+});
+
+app.get('/logout', async (req, res) => {
+  // Clear cookie and send to login
+  clearCookie(res, 'pp_session');
+  res.redirect('/login.html');
+});
+
+// ─── Auth: Manual-code (single use) ────────────────────────
 app.post('/auth/manual/verify', async (req, res) => {
   try {
     const email = (req.body?.email || '').trim();
-    const code  = (req.body?.code  || '').trim();
+    const code = (req.body?.code || '').trim();
     if (!email || !code) return res.status(400).json({ ok: false, error: 'Missing email or code' });
 
     const users = await supabaseRest(`/users?select=email,role&email=ilike.${encodeURIComponent(email)}`);
@@ -206,19 +258,23 @@ app.post('/auth/manual/verify', async (req, res) => {
       headers: { Prefer: 'return=representation' },
     });
 
-    const token = signJwt({ sub: users[0].email, role: users[0].role || 'member' }, APP_JWT_SECRET, 60*60*24*7);
-    setCookie(res, 'pp_session', token, { maxAge: 60*60*24*7 });
+    const token = signJwt(
+      { sub: users[0].email, role: users[0].role || 'member' },
+      APP_JWT_SECRET,
+      60 * 60 * 24 * 7
+    );
+    setCookie(res, 'pp_session', token, { maxAge: 60 * 60 * 24 * 7 });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err.message || err) });
   }
 });
 
-// ─── Auth: Admin-code (permanent) ─────────────────────────
+// ─── Auth: Admin-code (permanent) ──────────────────────────
 app.post('/auth/admin/verify', async (req, res) => {
   try {
     const email = (req.body?.email || '').trim();
-    const code  = (req.body?.code  || '').trim();
+    const code = (req.body?.code || '').trim();
     if (!email || !code) return res.status(400).json({ ok: false, error: 'Missing email or code' });
 
     const users = await supabaseRest(`/users?select=email,role&email=ilike.${encodeURIComponent(email)}`);
@@ -240,15 +296,15 @@ app.post('/auth/admin/verify', async (req, res) => {
       headers: { Prefer: 'return=representation' },
     });
 
-    const token = signJwt({ sub: users[0].email, role: 'admin' }, APP_JWT_SECRET, 60*60*24*7);
-    setCookie(res, 'pp_session', token, { maxAge: 60*60*24*7 });
+    const token = signJwt({ sub: users[0].email, role: 'admin' }, APP_JWT_SECRET, 60 * 60 * 24 * 7);
+    setCookie(res, 'pp_session', token, { maxAge: 60 * 60 * 24 * 7 });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err.message || err) });
   }
 });
 
-// ─── Session helpers / guard ───────────────────────────────
+// ─── Session helpers ───────────────────────────────────────
 app.get('/auth/me', (req, res) => {
   const cookies = parseCookies(req);
   const token = cookies.pp_session;
@@ -256,40 +312,30 @@ app.get('/auth/me', (req, res) => {
   if (!payload) return res.status(401).json({ ok: false });
   res.json({ ok: true, user: { email: payload.sub, role: payload.role } });
 });
-app.post('/auth/logout', (req, res) => { clearCookie(res, 'pp_session'); res.json({ ok: true }); });
 
-function requireAdmin(req, res, next) {
-  try {
-    const cookies = parseCookies(req);
-    const token = cookies.pp_session;
-    const payload = token ? verifyJwt(token, APP_JWT_SECRET) : null;
-    if (!payload || payload.role !== 'admin') {
-      return res.status(401).json({ ok: false, error: 'Admin only' });
-    }
-    next();
-  } catch {
-    return res.status(401).json({ ok: false, error: 'Admin only' });
-  }
-}
+app.post('/auth/logout', (req, res) => {
+  clearCookie(res, 'pp_session');
+  res.json({ ok: true });
+});
 
 // ───────────────────────────────────────────────────────────
-// Chat endpoint (streaming) — supports:
-// - useRetrieval: boolean (skip DB when false)
-// - history: [{role:'user'|'assistant', content:string}, ...] (client-side memory)
+// Chat endpoint (streaming)
+// Expects body:
+// { message: string, useRetrieval?: boolean, history?: [{role,content}], ...optional RAG params }
 // ───────────────────────────────────────────────────────────
 app.post('/chat', async (req, res) => {
   try {
     const userMessage = (req.body?.message || '').toString().slice(0, 8000);
     if (!userMessage) return res.status(400).json({ error: 'No message' });
 
-    // default ON unless explicitly false
+    // ✅ default ON unless explicitly false
     const useRetrieval = req.body?.useRetrieval !== false;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
 
-    // ── Build optional RAG context ──────────────────────────
+    // ── Optional retrieval context ─────────────────────────
     let sources = [];
     let contextText = '';
 
@@ -306,8 +352,8 @@ app.post('/chat', async (req, res) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(SUPABASE_API_KEY ? { 'apikey': SUPABASE_API_KEY } : {}),
-          ...(SUPABASE_BEARER ? { 'Authorization': `Bearer ${SUPABASE_BEARER}` } : {}),
+          ...(SUPABASE_API_KEY ? { apikey: SUPABASE_API_KEY } : {}),
+          ...(SUPABASE_BEARER ? { Authorization: `Bearer ${SUPABASE_BEARER}` } : {}),
         },
         body: JSON.stringify(ragBody),
       });
@@ -329,7 +375,10 @@ app.post('/chat', async (req, res) => {
       matches.forEach((m, i) => {
         const title = m.doc_name || m.bron || `Bron #${i + 1}`;
         const url = m.link || null;
-        const snippet = (m.invloed_text || m.content || '').toString().trim().replace(/\s+/g, ' ');
+        const snippet = (m.invloed_text || m.content || '')
+          .toString()
+          .trim()
+          .replace(/\s+/g, ' ');
         const block = `[#${i + 1}] ${title}${url ? ` (${url})` : ''}\n${snippet}\n---\n`;
         if (used + block.length <= maxChars) {
           snippets.push(block);
@@ -341,36 +390,63 @@ app.post('/chat', async (req, res) => {
       contextText = snippets.join('');
     }
 
-    // ── Build message list (system + optional history) ──────
-    // NOTE: We trust client history only as conversational context (not auth).
+    // ── Build message list (ordering matters!) ──────────────
     const rawHistory = Array.isArray(req.body?.history) ? req.body.history : [];
 
-    // Basic sanitize + clamp: keep last N turns and clamp each content
     const MAX_HISTORY_MESSAGES = Number(process.env.CHAT_MAX_HISTORY_MESSAGES || 24);
-    const safeHistory = rawHistory
-      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    let safeHistory = rawHistory
+      .filter(
+        (m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+      )
       .slice(-MAX_HISTORY_MESSAGES)
-      .map(m => ({ role: m.role, content: m.content.slice(0, 8000) }));
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
-    // Ensure the latest userMessage is present (in case client history excludes it)
-    const last = safeHistory[safeHistory.length - 1];
-    const historyIncludesLatestUser =
-      last && last.role === 'user' && last.content.trim() === userMessage.trim();
+    // If client already included this exact userMessage at the end of history,
+    // remove duplicates so we can re-add it at the correct position.
+    while (safeHistory.length) {
+      const last = safeHistory[safeHistory.length - 1];
+      if (last.role === 'user' && last.content.trim() === userMessage.trim()) {
+        safeHistory.pop();
+        continue;
+      }
+      break;
+    }
 
+    // ✅ Correct order:
+    // SYSTEM -> CONTEXT (if any) -> HISTORY -> CURRENT USER (last)
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...safeHistory,
-      ...(!historyIncludesLatestUser ? [{ role: 'user', content: userMessage }] : []),
       ...(useRetrieval
-        ? [{ role: 'system', content: `CONTEXT:\n${contextText || '(no relevant matches found)'}` }]
-        : [])
+        ? [
+            {
+              role: 'system',
+              content: `CONTEXT:\n${contextText || '(no relevant matches found)'}`,
+            },
+          ]
+        : []),
+      ...safeHistory,
+      { role: 'user', content: userMessage },
     ];
 
-    const body = { model: OPENAI_MODEL, stream: true, temperature: 0.2, messages };
+    if (!OPENAI_API_KEY) {
+      sse(res, { type: 'error', message: 'Server missing OPENAI_API_KEY' });
+      sse(res, { type: 'done' });
+      return res.end();
+    }
+
+    const body = {
+      model: OPENAI_MODEL,
+      stream: true,
+      temperature: 0.2,
+      messages,
+    };
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(body),
     });
 
@@ -388,6 +464,7 @@ app.post('/chat', async (req, res) => {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -398,7 +475,6 @@ app.post('/chat', async (req, res) => {
         const payload = trimmed.slice(5).trim();
 
         if (payload === '[DONE]') {
-          // Only emit sources if retrieval was used; otherwise send empty list (keeps UI stable)
           sse(res, { type: 'sources', items: useRetrieval ? sources : [] });
           sse(res, { type: 'done' });
           return res.end();
@@ -408,7 +484,9 @@ app.post('/chat', async (req, res) => {
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta?.content;
           if (delta) sse(res, { type: 'token', text: delta });
-        } catch {}
+        } catch {
+          // ignore parse errors
+        }
       }
     }
 
@@ -416,56 +494,62 @@ app.post('/chat', async (req, res) => {
     sse(res, { type: 'done' });
     res.end();
   } catch (err) {
-    sse(res, { type: 'error', message: err.message || String(err) });
-    sse(res, { type: 'done' });
+    try {
+      sse(res, { type: 'error', message: err.message || String(err) });
+      sse(res, { type: 'done' });
+    } catch {}
     res.end();
   }
 });
 
-// ─── Site content (public pages) ───────────────────────────
-app.get('/site-content', async (req, res) => {
-  try {
-    const page = (req.query.page || '').toLowerCase();
-    const lang = (req.query.lang || 'en').toLowerCase().startsWith('nl') ? 'nl' : 'en';
-    if (!page) return res.status(400).json({ ok: false, error: 'Missing ?page=' });
+// ───────────────────────────────────────────────────────────
+// Public API routes (these are what your main.js calls)
+// ───────────────────────────────────────────────────────────
 
-    const rows = await supabaseRest(
-      `/site_content?select=page,page_text_en,page_text_nl&limit=1&page=eq.${encodeURIComponent(page)}`
-    );
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(404).json({ ok: false, error: `No content for page "${page}"` });
-    }
-
-    const row = rows[0];
-    const content = lang === 'nl'
-      ? (row.page_text_nl || row.page_text_en || '')
-      : (row.page_text_en || row.page_text_nl || '');
-    res.json({ ok: true, page: row.page, lang, content });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: String(err.message || err) });
-  }
-});
-
-// ─── Project settings public read ──────────────────────────
-app.get('/project-settings', async (req, res) => {
+// /api/project-settings (used by main.js)
+app.get('/api/project-settings', async (req, res) => {
   try {
     const rows = await supabaseRest(`/project_settings?select=setting_name,setting_content`);
-    if (!Array.isArray(rows)) return res.status(500).json({ ok: false, error: 'No project_settings found' });
     const settings = {};
-    for (const row of rows) settings[row.setting_name] = row.setting_content;
+    if (Array.isArray(rows)) {
+      for (const row of rows) settings[row.setting_name] = row.setting_content;
+    }
     res.json({ ok: true, settings });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err.message || err) });
   }
 });
 
-// ─── Documents: unique list for "Included data" ───────────
-app.get('/documents/list', async (req, res) => {
+// /api/site-content (used by main.js modal)
+app.get('/api/site-content', async (req, res) => {
   try {
+    const page = String(req.query.page || '').toLowerCase();
+    const lang = String(req.query.lang || 'en').toLowerCase().startsWith('nl') ? 'nl' : 'en';
+    if (!page) return res.status(400).json({ ok: false, error: 'Missing ?page=' });
+
     const rows = await supabaseRest(
-      `/documents?select=doc_name,uploaded_by&order=uploaded_by.asc,doc_name.asc`
+      `/site_content?select=page,page_text_en,page_text_nl&limit=1&page=eq.${encodeURIComponent(page)}`
     );
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(404).json({ ok: false, error: `No content for page "${page}"` });
+    }
+
+    const row = rows[0];
+    const content =
+      lang === 'nl'
+        ? row.page_text_nl || row.page_text_en || ''
+        : row.page_text_en || row.page_text_nl || '';
+
+    res.json({ ok: true, page: row.page, lang, content });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err.message || err) });
+  }
+});
+
+// /api/documents/list (used by main.js "Included data")
+app.get('/api/documents/list', async (req, res) => {
+  try {
+    const rows = await supabaseRest(`/documents?select=doc_name,uploaded_by&order=uploaded_by.asc,doc_name.asc`);
     if (!Array.isArray(rows)) return res.json({ ok: true, items: [] });
 
     const seen = new Set();
@@ -483,20 +567,35 @@ app.get('/documents/list', async (req, res) => {
   }
 });
 
-// ─── Documents: raw rows for admin (kept to avoid 404) ─────
+// /api/example-prompts (used by main.js)
+app.get('/api/example-prompts', async (req, res) => {
+  try {
+    const rows = await supabaseRest(
+      `/example_prompts?select=id,created_at,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc`
+    );
+    res.json({ ok: true, items: Array.isArray(rows) ? rows : [] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+// ───────────────────────────────────────────────────────────
+// Admin endpoints (used by your admin UI)
+// ───────────────────────────────────────────────────────────
+
+// Raw list for admin (kept)
 app.get('/documents/list-raw', requireAdmin, async (req, res) => {
   try {
     const rows = await supabaseRest(
       `/documents?select=document_id,doc_name,uploaded_by,date_uploaded,chunk_index,naam,content,invloed_text,bron,link&order=doc_name.asc,uploaded_by.asc,chunk_index.asc`
     );
-    if (!Array.isArray(rows)) return res.json({ ok: true, items: [] });
-    res.json({ ok: true, items: rows });
+    res.json({ ok: true, items: Array.isArray(rows) ? rows : [] });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err.message || err), items: [] });
   }
 });
 
-// ─── Documents: delete by doc_name (single & bulk) ─────────
+// Delete docs
 app.delete('/documents', requireAdmin, async (req, res) => {
   try {
     const docNames = Array.isArray(req.body?.doc_names) ? req.body.doc_names : [];
@@ -534,26 +633,13 @@ app.delete('/documents/:doc_name', requireAdmin, async (req, res) => {
   }
 });
 
-// ─── Example prompts CRUD (public read, admin write) ───────
-app.get('/api/example-prompts', async (req, res) => {
-  try {
-    const rows = await supabaseRest(
-      `/example_prompts?select=id,created_at,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc`,
-      { headers: { 'Accept-Profile': 'public' } }
-    );
-    res.json({ ok: true, items: rows });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
+// Example prompts (admin)
 app.get('/admin/example-prompts', requireAdmin, async (req, res) => {
   try {
     const rows = await supabaseRest(
-      `/example_prompts?select=id,created_at,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc`,
-      { headers: { 'Accept-Profile': 'public' } }
+      `/example_prompts?select=id,created_at,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc`
     );
-    res.json({ ok: true, items: rows });
+    res.json({ ok: true, items: Array.isArray(rows) ? rows : [] });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
@@ -564,13 +650,13 @@ app.post('/admin/example-prompts', requireAdmin, async (req, res) => {
     const body = {
       prompt_title_nl: req.body?.prompt_title_nl ?? null,
       prompt_title_en: req.body?.prompt_title_en ?? null,
-      prompt_full_nl : req.body?.prompt_full_nl  ?? null,
-      prompt_full_en : req.body?.prompt_full_en  ?? null,
+      prompt_full_nl: req.body?.prompt_full_nl ?? null,
+      prompt_full_en: req.body?.prompt_full_en ?? null,
     };
     const out = await supabaseRest(`/example_prompts`, {
       method: 'POST',
-      headers: { 'Prefer': 'return=representation', 'Accept-Profile': 'public' },
-      body
+      headers: { Prefer: 'return=representation' },
+      body,
     });
     res.json({ ok: true, item: Array.isArray(out) ? out[0] : out });
   } catch (e) {
@@ -582,14 +668,16 @@ app.patch('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     const body = {};
-    ['prompt_title_nl','prompt_title_en','prompt_full_nl','prompt_full_en'].forEach(k => {
+    ['prompt_title_nl', 'prompt_title_en', 'prompt_full_nl', 'prompt_full_en'].forEach((k) => {
       if (k in req.body) body[k] = req.body[k];
     });
+
     const out = await supabaseRest(`/example_prompts?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Prefer': 'return=representation', 'Accept-Profile': 'public' },
-      body
+      headers: { Prefer: 'return=representation' },
+      body,
     });
+
     res.json({ ok: true, item: Array.isArray(out) ? out[0] : out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -601,7 +689,7 @@ app.delete('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
     const id = req.params.id;
     await supabaseRest(`/example_prompts?id=eq.${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: { 'Accept-Profile': 'public' }
+      headers: { Prefer: 'return=representation' },
     });
     res.json({ ok: true });
   } catch (e) {
@@ -609,7 +697,7 @@ app.delete('/admin/example-prompts/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// ─── Admin: Project settings read/write ────────────────────
+// Admin settings
 app.get('/admin/settings', requireAdmin, async (req, res) => {
   try {
     const rows = await supabaseRest(`/project_settings?select=setting_name,setting_content`);
@@ -627,23 +715,37 @@ app.patch('/admin/settings', requireAdmin, async (req, res) => {
   try {
     const updates = req.body || {};
     const results = {};
+
     for (const [name, content] of Object.entries(updates)) {
       let didUpdate = false;
+
+      // Try patch first
       try {
         const patched = await supabaseRest(
           `/project_settings?setting_name=eq.${encodeURIComponent(name)}`,
-          { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: { setting_content: String(content ?? '') } }
+          {
+            method: 'PATCH',
+            headers: { Prefer: 'return=representation' },
+            body: { setting_content: String(content ?? '') },
+          }
         );
-        if (Array.isArray(patched) && patched.length) { results[name] = 'updated'; didUpdate = true; }
+        if (Array.isArray(patched) && patched.length) {
+          results[name] = 'updated';
+          didUpdate = true;
+        }
       } catch (_) {}
+
+      // Insert if missing
       if (!didUpdate) {
         await supabaseRest(`/project_settings`, {
-          method: 'POST', headers: { Prefer: 'return=representation' },
-          body: { setting_name: name, setting_content: String(content ?? '') }
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: { setting_name: name, setting_content: String(content ?? '') },
         });
         results[name] = 'inserted';
       }
     }
+
     res.json({ ok: true, results });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -653,16 +755,16 @@ app.patch('/admin/settings', requireAdmin, async (req, res) => {
 app.post('/admin/reload-system-prompt', requireAdmin, async (req, res) => {
   try {
     const ok = await fetchSystemPromptFromDB();
-    return res.status(ok ? 200 : 500).json({ ok, size: SYSTEM_PROMPT.length });
+    res.status(ok ? 200 : 500).json({ ok, size: SYSTEM_PROMPT.length });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
 
 // ───────────────────────────────────────────────────────────
-// Spreadsheet ingest helpers
+// Spreadsheet ingest (admin)
 // ───────────────────────────────────────────────────────────
-function readMultipart(req){
+function readMultipart(req) {
   return new Promise((resolve, reject) => {
     const busboy = Busboy({ headers: req.headers });
     const fields = {};
@@ -671,11 +773,16 @@ function readMultipart(req){
     busboy.on('file', (name, file, info) => {
       const { filename, mimeType } = info;
       const chunks = [];
-      file.on('data', d => chunks.push(d));
-      file.on('end', () => { fileInfo = { filename, mimeType, buffer: Buffer.concat(chunks) }; });
+      file.on('data', (d) => chunks.push(d));
+      file.on('end', () => {
+        fileInfo = { filename, mimeType, buffer: Buffer.concat(chunks) };
+      });
     });
 
-    busboy.on('field', (name, val) => { fields[name] = val; });
+    busboy.on('field', (name, val) => {
+      fields[name] = val;
+    });
+
     busboy.on('error', reject);
     busboy.on('finish', () => resolve({ fields, file: fileInfo }));
 
@@ -689,23 +796,25 @@ function detectDelimiter(sample) {
   const cc = (firstLine.match(/,/g) || []).length;
   return sc > cc ? ';' : ',';
 }
+
 function readCsv(buffer) {
   const text = buffer.toString('utf8');
   const delimiter = detectDelimiter(text);
-  const records = csvParse(text, {
+  return csvParse(text, {
     columns: true,
     skip_empty_lines: true,
     delimiter,
     bom: true,
-    trim: true
+    trim: true,
   });
-  return records;
 }
+
 function readXlsx(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
 }
+
 function readSpreadsheetFile(filename, buffer) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (ext === 'csv') return readCsv(buffer);
@@ -747,62 +856,61 @@ async function getExistingDocumentIdForDocName(doc_name) {
   if (Array.isArray(rows) && rows.length && rows[0].document_id) return rows[0].document_id;
   return null;
 }
+
 async function upsertDocumentRows(rows) {
-  return await supabaseRest(
-    `/documents?on_conflict=doc_name,chunk_index`,
-    {
-      method: 'POST',
-      headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
-      body: rows,
-    }
-  );
+  return await supabaseRest(`/documents?on_conflict=doc_name,chunk_index`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: rows,
+  });
 }
-function rowsToCsv(rows){
+
+function rowsToCsv(rows) {
   const headers = [
-    'document_id','doc_name','uploaded_by','chunk_index','datum',
-    'naam','bron','link','invloed_text','content'
+    'document_id',
+    'doc_name',
+    'uploaded_by',
+    'chunk_index',
+    'datum',
+    'naam',
+    'bron',
+    'link',
+    'invloed_text',
+    'content',
   ];
   const esc = (s) => {
     const t = String(s ?? '');
-    return /[",\n]/.test(t) ? `"${t.replace(/"/g,'""')}"` : t;
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   };
-  const body = rows.map(r => headers.map(h => esc(r[h])).join(',')).join('\n');
+  const body = rows.map((r) => headers.map((h) => esc(r[h])).join(',')).join('\n');
   return headers.join(',') + '\n' + body;
 }
 
-// ─── Admin: Ingest spreadsheet (CSV/XLSX) ──────────────────
 app.post('/admin/ingest', requireAdmin, async (req, res) => {
   try {
     const { fields, file } = await readMultipart(req);
-    const action = String(fields.action || '').toLowerCase();     // 'preview' | 'upload'
-    const input_doc_name = (fields.doc_name || '').trim();        // REQUIRED: from form
-    const input_uploaded_by = (fields.uploaded_by || '').trim();  // REQUIRED: from form
+    const action = String(fields.action || '').toLowerCase(); // 'preview' | 'upload'
+    const input_doc_name = (fields.doc_name || '').trim();
+    const input_uploaded_by = (fields.uploaded_by || '').trim();
 
     if (!file?.buffer?.length) return res.status(400).json({ ok: false, error: 'Missing file' });
     if (!input_doc_name) return res.status(400).json({ ok: false, error: 'Missing form field: doc_name' });
     if (!input_uploaded_by) return res.status(400).json({ ok: false, error: 'Missing form field: uploaded_by' });
 
-    // 1) Read rows from CSV/XLSX
     const rawRows = readSpreadsheetFile(file.filename || 'upload', file.buffer);
     if (!Array.isArray(rawRows) || rawRows.length === 0) {
       return res.status(400).json({ ok: false, error: 'No rows found in spreadsheet' });
     }
 
-    // 2) Normalize rows to expected shape
-    let normalized = rawRows.map(r => {
+    let normalized = rawRows.map((r) => {
       const core = normalizeRowFromSheet(r);
-      return {
-        ...core,
-        doc_name: input_doc_name,
-        uploaded_by: input_uploaded_by,
-      };
+      return { ...core, doc_name: input_doc_name, uploaded_by: input_uploaded_by };
     });
 
-    // 3) Resolve document_id once
     const reuseId = await getExistingDocumentIdForDocName(input_doc_name);
-    const document_id = reuseId || (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+    const document_id =
+      reuseId || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-    // 4) Assign chunk_index where absent and build preview rows
     normalized = finalizeChunkIndexes(normalized, input_doc_name);
 
     const previewRows = normalized.map((r) => ({
@@ -815,7 +923,7 @@ app.post('/admin/ingest', requireAdmin, async (req, res) => {
       bron: r.bron,
       link: r.link,
       invloed_text: r.invloed_text,
-      content: r.content
+      content: r.content,
     }));
 
     if (action === 'preview') {
@@ -825,65 +933,48 @@ app.post('/admin/ingest', requireAdmin, async (req, res) => {
 
     if (action === 'upload') {
       if (!OPENAI_API_KEY && !DRY_RUN_EMBEDDINGS) {
-        console.error('UPLOAD ABORT: Missing OPENAI_API_KEY');
         return res.status(500).json({ ok: false, error: 'OPENAI_API_KEY missing' });
       }
 
-      // 5) Create embeddings (or skip if DRY_RUN_EMBEDDINGS=1)
-      let contentEmb = null, invloedEmb = null;
-      try {
-        if (!DRY_RUN_EMBEDDINGS) {
-          const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-          const contentInputs = previewRows.map(r => r.content || '');
-          const invloedInputs = previewRows.map(r => r.invloed_text || '');
-          console.log(`Creating embeddings: content=${contentInputs.length}, invloed=${invloedInputs.length}, model=${EMBED_MODEL}`);
-          contentEmb = await client.embeddings.create({ model: EMBED_MODEL, input: contentInputs });
-          invloedEmb = await client.embeddings.create({ model: EMBED_MODEL, input: invloedInputs });
-          console.log('Embeddings created OK');
-        } else {
-          console.warn('DRY_RUN_EMBEDDINGS=1 → skipping OpenAI calls, writing null vectors.');
-        }
-      } catch (e) {
-        console.error('OpenAI embeddings error:', e?.message || e);
-        return res.status(500).json({ ok: false, error: `OpenAI embeddings failed: ${e?.message || e}` });
+      let contentEmb = null;
+      let invloedEmb = null;
+
+      if (!DRY_RUN_EMBEDDINGS) {
+        const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+        const contentInputs = previewRows.map((r) => r.content || '');
+        const invloedInputs = previewRows.map((r) => r.invloed_text || '');
+        contentEmb = await client.embeddings.create({ model: EMBED_MODEL, input: contentInputs });
+        invloedEmb = await client.embeddings.create({ model: EMBED_MODEL, input: invloedInputs });
       }
 
-      // Your schema: date_uploaded is DATE (YYYY-MM-DD)
-      const today = new Date().toISOString().slice(0,10);
+      // schema expects date_uploaded as DATE
+      const today = new Date().toISOString().slice(0, 10);
 
       const upsertRows = previewRows.map((r, i) => ({
         ...r,
-        embedding: DRY_RUN_EMBEDDINGS ? null : (contentEmb?.data?.[i]?.embedding || null),
+        embedding: DRY_RUN_EMBEDDINGS ? null : contentEmb?.data?.[i]?.embedding || null,
         invloed_embedding: DRY_RUN_EMBEDDINGS
           ? null
-          : ((r.invloed_text || '').trim() ? (invloedEmb?.data?.[i]?.embedding || null) : null),
+          : ((r.invloed_text || '').trim() ? invloedEmb?.data?.[i]?.embedding || null : null),
         metadata: { source: 'admin_ingest_spreadsheet' },
-        date_uploaded: today
+        date_uploaded: today,
       }));
 
-      try {
-        const out = await upsertDocumentRows(upsertRows);
-        console.log(`Upsert OK: returned ${Array.isArray(out) ? out.length : 0} rows`);
-        return res.json({ ok: true, document_id, count: upsertRows.length });
-      } catch (e) {
-        console.error('Supabase upsert error:', e?.message || e);
-        return res.status(500).json({ ok: false, error: `Supabase upsert failed: ${e?.message || e}` });
-      }
+      await upsertDocumentRows(upsertRows);
+      return res.json({ ok: true, document_id, count: upsertRows.length });
     }
 
     return res.status(400).json({ ok: false, error: 'Invalid action (use preview|upload)' });
   } catch (e) {
-    console.error('Ingest spreadsheet error:', e);
+    console.error('Ingest error:', e);
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
 
-// ─── Admin: Users & Login Codes overview ──────────────────
+// Admin users overview (optional)
 app.get('/api/admin/users_overview', requireAdmin, async (req, res) => {
   try {
-    const rows = await supabaseRest(
-      `/user_login_overview?select=*&order=email.asc`
-    );
+    const rows = await supabaseRest(`/user_login_overview?select=*&order=email.asc`);
     const data = Array.isArray(rows) ? rows : [];
     res.json({ ok: true, count: data.length, data });
   } catch (e) {
@@ -891,67 +982,7 @@ app.get('/api/admin/users_overview', requireAdmin, async (req, res) => {
   }
 });
 
-// ─── Admin: Create/Update user, Delete user ────────────────
-app.post('/admin/users', requireAdmin, async (req, res) => {
-  try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const role  = String(req.body?.role  || '').trim().toLowerCase();
-    if (!email || !/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
-      return res.status(400).json({ ok: false, error: 'Valid email required' });
-    }
-    if (!['member','admin'].includes(role)) {
-      return res.status(400).json({ ok: false, error: "Role must be 'member' or 'admin'" });
-    }
-
-    const existing = await supabaseRest(`/users?select=email,role&email=eq.${encodeURIComponent(email)}&limit=1`);
-    if (Array.isArray(existing) && existing.length) {
-      const out = await supabaseRest(`/users?email=eq.${encodeURIComponent(email)}`, {
-        method: 'PATCH',
-        headers: { Prefer: 'return=representation' },
-        body: { role }
-      });
-      return res.json({ ok: true, mode: 'updated', user: Array.isArray(out) ? out[0] : out });
-    } else {
-      const out = await supabaseRest(`/users`, {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: { email, role }
-      });
-      return res.json({ ok: true, mode: 'inserted', user: Array.isArray(out) ? out[0] : out });
-    }
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-app.delete('/admin/users/:email', requireAdmin, async (req, res) => {
-  try {
-    const email = String(decodeURIComponent(req.params.email || '')).trim().toLowerCase();
-    if (!email) return res.status(400).json({ ok: false, error: 'Missing email' });
-
-    await supabaseRest(`/login_codes?email=eq.${encodeURIComponent(email)}`, {
-      method: 'DELETE',
-      headers: { Prefer: 'return=representation' }
-    }).catch(() => {});
-
-    await supabaseRest(`/admin_login_codes?email=eq.${encodeURIComponent(email)}`, {
-      method: 'DELETE',
-      headers: { Prefer: 'return=representation' }
-    }).catch(() => {});
-
-    const del = await supabaseRest(`/users?email=eq.${encodeURIComponent(email)}`, {
-      method: 'DELETE',
-      headers: { Prefer: 'return=representation' }
-    });
-
-    const deleted = Array.isArray(del) ? del.length : 0;
-    return res.json({ ok: true, deleted });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-// ─── Diagnostics (admin-only) ──────────────────────────────
+// Admin debug
 app.get('/admin/debug/env', requireAdmin, (req, res) => {
   res.json({
     ok: true,
@@ -961,7 +992,7 @@ app.get('/admin/debug/env', requireAdmin, (req, res) => {
     has_SUPABASE_BEARER: !!SUPABASE_BEARER,
     has_OPENAI_API_KEY: !!OPENAI_API_KEY,
     EMBED_MODEL,
-    DRY_RUN_EMBEDDINGS
+    DRY_RUN_EMBEDDINGS,
   });
 });
 
@@ -970,5 +1001,5 @@ app.listen(PORT, () => {
   console.log(`✅ Poli Pilot server ready at http://localhost:${PORT}`);
   if (!SUPABASE_FUNCTIONS_URL) console.warn('⚠️ SUPABASE_FUNCTIONS_URL is empty — RAG lookup will fail.');
   if (!SUPABASE_BEARER) console.warn('⚠️ SUPABASE_BEARER is empty — Supabase REST writes may fail (RLS).');
-  if (!OPENAI_API_KEY && !DRY_RUN_EMBEDDINGS) console.warn('⚠️ OPENAI_API_KEY is empty — embeddings will fail (or set DRY_RUN_EMBEDDINGS=1).');
+  if (!OPENAI_API_KEY && !DRY_RUN_EMBEDDINGS) console.warn('⚠️ OPENAI_API_KEY is empty — OpenAI calls will fail.');
 });
