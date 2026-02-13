@@ -508,7 +508,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
 border-radius: 20px 20px 0px 0px;
 /* background: linear-gradient(0deg, var(--white, #FFFCF7) 23.53%, #FDF3E3 84.05%); */
 background-color: var(--Edelman-blue);
-width: 172px;
+/* width: 172px; */
 /* height: 0px; */
 flex-shrink: 0;
 position: relative;
