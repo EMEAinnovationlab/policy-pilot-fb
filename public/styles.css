@@ -502,13 +502,13 @@ button:hover { box-shadow: var(--shadow-subtle); }
   align-self: center;
   text-align: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px 20px;
   cursor: pointer;
 border-radius: 20px 20px 0px 0px;
 /* background: linear-gradient(0deg, var(--white, #FFFCF7) 23.53%, #FDF3E3 84.05%); */
 background-color: var(--Edelman-blue);
 width: 172px;
-height: 36px;
+/* height: 0px; */
 flex-shrink: 0;
 position: relative;
 top: 25px;
@@ -526,7 +526,7 @@ letter-spacing: 2.4px;
 text-transform: uppercase;
 }
 
-.examples-toggle:hover { background: var(--full-white); }
+.examples-toggle:hover { background: var(--PublicMatters-blue)); }
 
 
 
