@@ -1,7 +1,6 @@
 // chatFlow.js
 import { renderAssistantHeader, getOrCreateContentContainer } from './strapline.js';
 import { renderMarkdownAndFadeNew } from './markdown.js';
-let conversation = [];
 
 export function createChatController({
   dom,        // { chat, input, sendBtn, stopBtn, clearBtn }
@@ -11,6 +10,10 @@ export function createChatController({
 }) {
   let controller = null;
 
+  // ✅ Client-side conversation memory (sent to backend each request)
+  // Includes: system prompt is handled server-side, so only user/assistant here.
+  let conversation = [];
+
   function append(role, html = '') {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
@@ -19,6 +22,7 @@ export function createChatController({
     dom.chat.scrollTop = dom.chat.scrollHeight;
     return div;
   }
+
   const show = el => el && el.classList.remove('hide');
   const hide = el => el && el.classList.add('hide');
 
@@ -61,6 +65,16 @@ export function createChatController({
     dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
   }
 
+  // ✅ Abort handler for Stop button (if you wire it in main.js)
+  function stopStreaming() {
+    try { controller?.abort(); } catch {}
+  }
+
+  // Optional helper if you want to clear memory on "new chat"
+  function clearConversationMemory() {
+    conversation = [];
+  }
+
   async function streamAssistantFromPrompt(
     prompt,
     { echoUser = true, closeExamplesOnStart = true, straplineText } = {}
@@ -71,19 +85,13 @@ export function createChatController({
     if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
 
     if (echoUser) {
+      // UI
       append('user', marked.parse(prompt));
       resetTextareaHeight();
+
+      // ✅ Memory
       conversation.push({ role: 'user', content: prompt });
-
     }
-
-    if (assistantDiv._rawTextBuffer) {
-  conversation.push({
-    role: 'assistant',
-    content: assistantDiv._rawTextBuffer
-  });
-}
-
 
     const assistantDiv = append('assistant', '');
     assistantDiv.classList.add('initializing');
@@ -96,18 +104,21 @@ export function createChatController({
     let straplineShown = false;
     let contentEl = null;
 
-    assistantDiv._rawTextBuffer = assistantDiv._rawTextBuffer || '';
+    // Buffer for this assistant turn
+    assistantDiv._rawTextBuffer = '';
 
     try {
       const resp = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // ✅ Send toggle state
+
+        // ✅ Send toggle state + full chat memory
         body: JSON.stringify({
           message: prompt,
-          history: conversation,
-          useRetrieval: useRetrievalForThisRequest
+          useRetrieval: useRetrievalForThisRequest,
+          history: conversation
         }),
+
         signal: controller.signal
       });
 
@@ -153,6 +164,7 @@ export function createChatController({
                 requestAnimationFrame(() => assistantDiv.classList.add('ready'));
                 gotAnyToken = true;
               }
+
               assistantDiv._rawTextBuffer += evt.text;
               renderMarkdownAndFadeNew(contentEl, assistantDiv._rawTextBuffer);
               dom.chat.scrollTop = dom.chat.scrollHeight;
@@ -173,6 +185,11 @@ export function createChatController({
             // ignore parse errors
           }
         }
+      }
+
+      // ✅ On successful completion, store assistant turn in memory
+      if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
+        conversation.push({ role: 'assistant', content: assistantDiv._rawTextBuffer });
       }
     } catch {
       showThinking(assistantDiv, false);
@@ -203,6 +220,10 @@ export function createChatController({
     streamAssistantFromPrompt,
     autoGrowTextarea,
     resetTextareaHeight,
-    setButtonsStreaming
+    setButtonsStreaming,
+
+    // ✅ Add these so main.js can hook Stop + Clear memory if you want
+    stopStreaming,
+    clearConversationMemory
   };
 }
