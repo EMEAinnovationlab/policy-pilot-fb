@@ -10,8 +10,9 @@ export function createChatController({
 }) {
   let controller = null;
 
-  // ✅ Client-side conversation memory (sent to backend each request)
-  // Includes: system prompt is handled server-side, so only user/assistant here.
+  // ✅ Client-side conversation memory that we send to the backend.
+  // IMPORTANT: We only append a full turn (user+assistant) AFTER the assistant finishes,
+  // so history is always "complete turns" and never half-baked.
   let conversation = [];
 
   function append(role, html = '') {
@@ -28,12 +29,26 @@ export function createChatController({
 
   function setButtonsStreaming(isStreaming) {
     if (isStreaming) {
-      if (dom.sendBtn) { dom.sendBtn.disabled = true; dom.sendBtn.style.opacity = '0.6'; dom.sendBtn.style.cursor = 'not-allowed'; }
-      if (dom.input) { dom.input.disabled = true; dom.input.setAttribute('aria-busy', 'true'); }
+      if (dom.sendBtn) {
+        dom.sendBtn.disabled = true;
+        dom.sendBtn.style.opacity = '0.6';
+        dom.sendBtn.style.cursor = 'not-allowed';
+      }
+      if (dom.input) {
+        dom.input.disabled = true;
+        dom.input.setAttribute('aria-busy', 'true');
+      }
       show(dom.stopBtn);
     } else {
-      if (dom.sendBtn) { dom.sendBtn.disabled = false; dom.sendBtn.style.opacity = '1'; dom.sendBtn.style.cursor = 'pointer'; }
-      if (dom.input) { dom.input.disabled = false; dom.input.removeAttribute('aria-busy'); }
+      if (dom.sendBtn) {
+        dom.sendBtn.disabled = false;
+        dom.sendBtn.style.opacity = '1';
+        dom.sendBtn.style.cursor = 'pointer';
+      }
+      if (dom.input) {
+        dom.input.disabled = false;
+        dom.input.removeAttribute('aria-busy');
+      }
       hide(dom.stopBtn);
     }
   }
@@ -65,12 +80,12 @@ export function createChatController({
     dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
   }
 
-  // ✅ Abort handler for Stop button (if you wire it in main.js)
+  // ✅ Stop streaming (optional to wire in main.js)
   function stopStreaming() {
     try { controller?.abort(); } catch {}
   }
 
-  // Optional helper if you want to clear memory on "new chat"
+  // ✅ Clear memory (call this when you start a new chat)
   function clearConversationMemory() {
     conversation = [];
   }
@@ -84,13 +99,10 @@ export function createChatController({
 
     if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
 
+    // UI: render user message (but DO NOT commit it to memory yet)
     if (echoUser) {
-      // UI
       append('user', marked.parse(prompt));
       resetTextareaHeight();
-
-      // ✅ Memory
-      conversation.push({ role: 'user', content: prompt });
     }
 
     const assistantDiv = append('assistant', '');
@@ -100,7 +112,10 @@ export function createChatController({
     controller = new AbortController();
     setButtonsStreaming(true);
 
-    const headerText = straplineText ?? (echoUser ? config.STRAPLINE.defaultText : config.STRAPLINE.autoStartText);
+    const headerText =
+      straplineText ??
+      (echoUser ? config.STRAPLINE.defaultText : config.STRAPLINE.autoStartText);
+
     let straplineShown = false;
     let contentEl = null;
 
@@ -108,24 +123,27 @@ export function createChatController({
     assistantDiv._rawTextBuffer = '';
 
     try {
+      // ✅ Send only *completed* history (previous turns)
       const resp = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-
-        // ✅ Send toggle state + full chat memory
         body: JSON.stringify({
           message: prompt,
           useRetrieval: useRetrievalForThisRequest,
           history: conversation
         }),
-
         signal: controller.signal
       });
 
       if (!resp.ok || !resp.body) {
         showThinking(assistantDiv, false);
         if (!straplineShown) {
-          renderAssistantHeader(assistantDiv, headerText, config.STRAPLINE.iconUrl, config.STRAPLINE.defaultText);
+          renderAssistantHeader(
+            assistantDiv,
+            headerText,
+            config.STRAPLINE.iconUrl,
+            config.STRAPLINE.defaultText
+          );
           straplineShown = true;
           contentEl = getOrCreateContentContainer(assistantDiv);
         }
@@ -142,8 +160,8 @@ export function createChatController({
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
 
+        buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
@@ -158,7 +176,12 @@ export function createChatController({
             if (evt.type === 'token') {
               if (!gotAnyToken) {
                 showThinking(assistantDiv, false);
-                renderAssistantHeader(assistantDiv, headerText, config.STRAPLINE.iconUrl, config.STRAPLINE.defaultText);
+                renderAssistantHeader(
+                  assistantDiv,
+                  headerText,
+                  config.STRAPLINE.iconUrl,
+                  config.STRAPLINE.defaultText
+                );
                 straplineShown = true;
                 contentEl = getOrCreateContentContainer(assistantDiv);
                 requestAnimationFrame(() => assistantDiv.classList.add('ready'));
@@ -172,7 +195,12 @@ export function createChatController({
             } else if (evt.type === 'error') {
               if (!straplineShown) {
                 showThinking(assistantDiv, false);
-                renderAssistantHeader(assistantDiv, headerText, config.STRAPLINE.iconUrl, config.STRAPLINE.defaultText);
+                renderAssistantHeader(
+                  assistantDiv,
+                  headerText,
+                  config.STRAPLINE.iconUrl,
+                  config.STRAPLINE.defaultText
+                );
                 straplineShown = true;
                 contentEl = getOrCreateContentContainer(assistantDiv);
               }
@@ -180,6 +208,8 @@ export function createChatController({
               err.style.cssText = 'color:red; margin-top:6px;';
               err.textContent = `[Error] ${evt.message}`;
               assistantDiv.appendChild(err);
+            } else if (evt.type === 'done') {
+              // no-op
             }
           } catch {
             // ignore parse errors
@@ -187,14 +217,23 @@ export function createChatController({
         }
       }
 
-      // ✅ On successful completion, store assistant turn in memory
+      // ✅ Commit the full turn to memory (user + assistant) AFTER completion.
+      if (echoUser) {
+        conversation.push({ role: 'user', content: prompt });
+      }
       if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
         conversation.push({ role: 'assistant', content: assistantDiv._rawTextBuffer });
       }
+
     } catch {
       showThinking(assistantDiv, false);
       if (!straplineShown) {
-        renderAssistantHeader(assistantDiv, headerText, config.STRAPLINE.iconUrl, config.STRAPLINE.defaultText);
+        renderAssistantHeader(
+          assistantDiv,
+          headerText,
+          config.STRAPLINE.iconUrl,
+          config.STRAPLINE.defaultText
+        );
         straplineShown = true;
         contentEl = getOrCreateContentContainer(assistantDiv);
       }
@@ -221,8 +260,6 @@ export function createChatController({
     autoGrowTextarea,
     resetTextareaHeight,
     setButtonsStreaming,
-
-    // ✅ Add these so main.js can hook Stop + Clear memory if you want
     stopStreaming,
     clearConversationMemory
   };
