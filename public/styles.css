@@ -1165,3 +1165,9 @@ cursor: pointer;
   color: white;
   font-size: 12px;
 }
+
+
+.db-toggle {
+  position: absolute;
+  left: -300px;
+}
