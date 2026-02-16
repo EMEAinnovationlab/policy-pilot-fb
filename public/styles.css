@@ -425,7 +425,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
   margin-bottom: var(--space-4);
   text-align: center;
   width: 100%;
-  margin-top: -100px;
+  margin-top: -50px;
 }
 .examples-grid {
   display: grid;
