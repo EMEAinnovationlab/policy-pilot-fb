@@ -1,4 +1,5 @@
-// ES module with top-level await. Ensure your HTML loads this with:
+// main.js — ES module (top-level await)
+// Ensure HTML loads with:
 // <script type="module" src="/js/main.js"></script>
 
 // ──────────────────────────────────────────────────────────
@@ -73,9 +74,6 @@ const closeExamplesBtn = document.getElementById('close-examples');
 const exampleCards = document.querySelectorAll('.example');
 const examplesToggle = document.getElementById('toggle-examples');
 
-// DB toggle
-const useDbToggle = document.getElementById('use-db');
-
 // Carousel controls (must exist in your HTML)
 const examplesPrevBtn = document.getElementById('examples-prev');
 const examplesNextBtn = document.getElementById('examples-next');
@@ -98,43 +96,21 @@ injectStraplineStyles({
 });
 
 // ──────────────────────────────────────────────────────────
-// ✅ Retrieval rule:
+// ✅ Retrieval rule (NO checkbox):
 // - If examples panel is OPEN → retrieval ON
-// - If examples panel is CLOSED → retrieval follows the checkbox (#use-db)
-// Also sync the checkbox when examples open/close so UI matches behavior.
+// - If examples panel is CLOSED → retrieval OFF
 // ──────────────────────────────────────────────────────────
 const isExamplesOpen = () =>
   !!examplesContainer && !examplesContainer.classList.contains('hide');
 
-const getUseRetrieval = () => {
-  // Examples open forces retrieval on
-  if (isExamplesOpen()) return true;
-  // Otherwise it follows the checkbox
-  return !!useDbToggle?.checked;
-};
+const getUseRetrieval = () => isExamplesOpen();
 
 // ──────────────────────────────────────────────────────────
-/** Examples helpers bound with our DOM (wrapped for checkbox sync) */
+/** Examples helpers bound with our DOM */
 const examples = {
-  openExamples: () => {
-    openExamples(examplesContainer, examplesToggle);
-    if (useDbToggle) useDbToggle.checked = true;
-  },
-  closeExamples: (opts) => {
-    closeExamples(examplesContainer, examplesToggle, opts);
-    if (useDbToggle) useDbToggle.checked = false;
-  }
+  openExamples: () => openExamples(examplesContainer, examplesToggle),
+  closeExamples: (opts) => closeExamples(examplesContainer, examplesToggle, opts)
 };
-
-// If user manually turns checkbox on, keep examples closed (optional).
-// If user turns checkbox off while examples are open, we close examples (so behavior matches UI).
-if (useDbToggle) {
-  useDbToggle.addEventListener('change', () => {
-    if (!useDbToggle.checked && isExamplesOpen()) {
-      examples.closeExamples({ animate: true, scroll: false });
-    }
-  });
-}
 
 // ──────────────────────────────────────────────────────────
 /** Chat controller */
@@ -160,7 +136,7 @@ if (clearBtn) {
   clearBtn.addEventListener('click', () => {
     if (chat) chat.innerHTML = '';
     controller.resetTextareaHeight();
-    examples.openExamples(); // also forces retrieval ON via wrapper
+    examples.openExamples(); // opening examples => retrieval ON
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   });
 }
@@ -181,14 +157,12 @@ if (input) {
 // Keep examples visible on load if chat is empty
 (function maybeShowExamples() {
   if (!examplesContainer || !chat) return;
-  if (chat.children.length === 0) examples.openExamples(); // also sets checkbox ON
+  if (chat.children.length === 0) examples.openExamples(); // retrieval ON while open
 })();
 
 if (examplesToggle && examplesContainer) {
   const open = !examplesContainer.classList.contains('hide');
   examplesToggle.classList.toggle('hide', open);
-  // keep checkbox synced on boot
-  if (useDbToggle) useDbToggle.checked = open ? true : !!useDbToggle.checked;
 }
 
 if (closeExamplesBtn) {
