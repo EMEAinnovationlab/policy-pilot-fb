@@ -48,8 +48,8 @@
 
 
   /* Effects */
-    --shadow-bg-drop: 0 2px 90px 0 rgba(233, 183, 97, 0.144);
-    --shadow-bg-drop-suttle: 0 2px 40px 0 rgba(233, 183, 97, 0.052);}
+    --shadow-bg-drop: 0 4px 90px 0 rgba(233, 182, 97, 0.26);
+    --shadow-bg-drop-suttle: 0 2px 40px 0 rgba(233, 183, 97, 0.126);}
 
 /***** Base / Reset *****/
 *,
@@ -223,7 +223,7 @@ main {
   min-width: 1000px;
   max-height: 86vh;
   background-color: var(--white);
-  box-shadow: var(--shadow-bg-drop);
+  box-shadow: var(--shadow-bg-drop-suttle);
   border-radius: var(--r-sm);
   overflow-y: scroll;
   scrollbar-width: none;
@@ -298,7 +298,7 @@ main {
   color: var(--medium-dark-brown);
 line-height: 180%; 
 background-color: var(--white);
-box-shadow: var(--shadow-bg-drop-suttle);
+box-shadow: var(--shadow-bg-drop);
 }
 
 .assistant { 
