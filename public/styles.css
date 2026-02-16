@@ -48,8 +48,8 @@
 
 
   /* Effects */
-    --shadow-bg-drop: 0 4px 90px 0 rgba(233, 182, 97, 0.26);
-    --shadow-bg-drop-suttle: 0 2px 40px 0 rgba(233, 183, 97, 0.126);}
+    --shadow-bg-drop: 0 2px 90px 0 rgba(233, 183, 97, 0.07);
+    --shadow-bg-drop-suttle: 0 2px 40px 0 rgba(233, 183, 97, 0.052);}
 
 /***** Base / Reset *****/
 *,
