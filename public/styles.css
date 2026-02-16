@@ -425,6 +425,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
   margin-bottom: var(--space-4);
   text-align: center;
   width: 100%;
+  margin-top: -100px;
 }
 .examples-grid {
   display: grid;
@@ -1170,4 +1171,4 @@ cursor: pointer;
 /* .db-toggle {
   position: absolute;
   left: -300px;
-} */
+x§
