@@ -220,13 +220,14 @@ main {
 .chat-wrapper {
   max-width: 1000px;
   min-width: 1000px;
-  max-height: 95vh;
+  max-height: 100vh;
   background-color: var(--white);
   box-shadow: var(--shadow-bg-drop-suttle);
   border-radius: var(--r-sm);
   overflow-y: scroll;
   scrollbar-width: none;
   padding-bottom: 300px;
+  padding-top: 300px;
 }
 
 /* 🔸 Responsive breakpoint — below 1000px screen width */
@@ -252,6 +253,7 @@ main {
   flex-direction: column;
   gap: var(--space-2);
   padding: 2.5vw;
+  height: 100vh;
   /* padding-top: 150px; */
   
 }
