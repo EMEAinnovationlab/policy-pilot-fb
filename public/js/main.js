@@ -145,6 +145,8 @@ attachExampleFillHandlers({
   exampleCards,
   input,
   autoGrowTextarea: controller.autoGrowTextarea,
+  // ✅ FIX: provide closeExamplesFn so clicks don't throw
+  closeExamplesFn: (opts) => examples.closeExamples(opts),
 });
 
 // Buttons / inputs
@@ -535,6 +537,8 @@ async function loadAndRenderExamplePrompts() {
       exampleCards: cards,
       input,
       autoGrowTextarea: controller.autoGrowTextarea,
+      // ✅ FIX: provide closeExamplesFn so dynamically loaded cards work too
+      closeExamplesFn: (opts) => examples.closeExamples(opts),
     });
 
     setupExamplesCarousel();
