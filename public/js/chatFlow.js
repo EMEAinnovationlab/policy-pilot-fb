@@ -10,12 +10,10 @@ export function createChatController({
 }) {
   let controller = null;
 
-  // ✅ Client-side conversation memory that we send to the backend.
-  // IMPORTANT: We only append a full turn (user+assistant) AFTER the assistant finishes,
-  // so history is always "complete turns" and never half-baked.
+  // Client-side conversation memory (only complete turns)
   let conversation = [];
 
-  // Keep latest completed assistant output (for summary button)
+  // Latest completed assistant output (used for summary)
   let lastAssistantText = '';
 
   function append(role, html = '') {
@@ -94,11 +92,13 @@ export function createChatController({
     lastAssistantText = '';
   }
 
-  // ──────────────────────────────────────────────────────────
-  // Post-actions UI (added AFTER completion only)
-  // ──────────────────────────────────────────────────────────
-  function addPostActions(assistantDiv) {
-    if (!assistantDiv) return;
+  // Post-actions UI
+  // mode:
+  //   true        => show both buttons
+  //   "data-only" => only "Nieuw data verzoek"
+  //   false       => none
+  function addPostActions(assistantDiv, mode = true) {
+    if (!assistantDiv || !mode) return;
     if (assistantDiv.querySelector('.pp-post-actions')) return;
 
     const actions = document.createElement('div');
@@ -112,38 +112,38 @@ export function createChatController({
       examples?.openExamples?.();
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     });
-
-    const btnSummary = document.createElement('button');
-    btnSummary.type = 'button';
-    btnSummary.className = 'pp-post-btn';
-    btnSummary.textContent = 'Maak samenvatting';
-    btnSummary.addEventListener('click', async () => {
-      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
-      if (!summaryPrompt) return;
-
-      const baseText = (lastAssistantText || '').trim();
-      const payload = baseText
-        ? `${summaryPrompt}\n\n---\n\n${baseText}`
-        : summaryPrompt;
-
-      // Don’t echo as user; it’s a UI action
-      await streamAssistantFromPrompt(payload, {
-        echoUser: false,
-        closeExamplesOnStart: true,
-        straplineText: 'SAMENVATTING',
-        showPostActions: true // summary result should get buttons
-      });
-    });
-
     actions.appendChild(btnData);
-    actions.appendChild(btnSummary);
 
-    // Put actions under the assistant content container if present
+    if (mode === true) {
+      const btnSummary = document.createElement('button');
+      btnSummary.type = 'button';
+      btnSummary.className = 'pp-post-btn';
+      btnSummary.textContent = 'Maak samenvatting';
+
+      btnSummary.addEventListener('click', async () => {
+        const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+        if (!summaryPrompt) return;
+
+        const baseText = (lastAssistantText || '').trim();
+        const payload = baseText ? `${summaryPrompt}\n\n---\n\n${baseText}` : summaryPrompt;
+
+        await streamAssistantFromPrompt(payload, {
+          echoUser: false,
+          closeExamplesOnStart: true,
+          straplineText: 'SAMENVATTING',
+          showPostActions: 'data-only' // summary output only gets data button
+        });
+      });
+
+      actions.appendChild(btnSummary);
+    }
+
     const content = assistantDiv.querySelector('.content') || assistantDiv;
     content.appendChild(actions);
   }
 
-  // ✅ Hardcoded intro message (NO post-actions by design)
+  // Hardcoded intro message — keep as plain text (not a backend prompt)
+  // but show "Nieuw data verzoek" after rendering.
   function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
     const assistantDiv = append('assistant', '');
     assistantDiv.classList.add('initializing');
@@ -159,17 +159,18 @@ export function createChatController({
     );
 
     const contentEl = getOrCreateContentContainer(assistantDiv);
-
     renderMarkdownAndFadeNew(contentEl, markdownText || '');
     requestAnimationFrame(() => assistantDiv.classList.add('ready'));
 
-    // Seed memory
+    // Seed memory locally (doesn't call backend)
     if (markdownText && String(markdownText).trim()) {
       conversation.push({ role: 'assistant', content: String(markdownText) });
       lastAssistantText = String(markdownText);
     }
 
-    // ❌ IMPORTANT: no buttons on intro
+    // Intro should only have "Nieuw data verzoek"
+    addPostActions(assistantDiv, 'data-only');
+
     return assistantDiv;
   }
 
@@ -179,15 +180,15 @@ export function createChatController({
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true // ✅ controls whether we append buttons when done
+      showPostActions = 'auto' // 'auto' decides based on retrieval for this request
     } = {}
   ) {
+    // Capture retrieval state BEFORE we possibly close examples
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
 
     if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
     if (echoUser) {
-      // marked is global (loaded in main.js)
       const html = window.marked?.parse ? window.marked.parse(prompt) : String(prompt);
       append('user', html);
       resetTextareaHeight();
@@ -236,8 +237,8 @@ export function createChatController({
         contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
         assistantDiv.classList.add('ready');
 
-        // ✅ ONLY after completion (even on error)
-        if (showPostActions) addPostActions(assistantDiv);
+        const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
+        addPostActions(assistantDiv, postMode);
         return;
       }
 
@@ -304,7 +305,7 @@ export function createChatController({
         }
       }
 
-      // ✅ Commit full turn AFTER completion
+      // Commit full turn AFTER completion
       if (echoUser) conversation.push({ role: 'user', content: prompt });
 
       if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
@@ -313,10 +314,10 @@ export function createChatController({
         lastAssistantText = finalText;
       }
 
-      // ✅ Buttons appear ONLY after streaming is fully done
-      if (showPostActions) addPostActions(assistantDiv);
+      const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
+      addPostActions(assistantDiv, postMode);
 
-    } catch {
+    } catch (err) {
       showThinking(assistantDiv, false);
       if (!straplineShown) {
         renderAssistantHeader(
@@ -334,9 +335,8 @@ export function createChatController({
       err.textContent = msg;
       assistantDiv.appendChild(err);
 
-      // ✅ Only after completion
-      if (showPostActions) addPostActions(assistantDiv);
-
+      const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
+      addPostActions(assistantDiv, postMode);
     } finally {
       setButtonsStreaming(false);
       controller = null;
@@ -346,7 +346,31 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
+
+    // support typed summary command
+    if (text.toLowerCase() === 'maak samenvatting') {
+      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+      if (!summaryPrompt) return;
+
+      const baseText = (lastAssistantText || '').trim();
+      const payload = baseText ? `${summaryPrompt}\n\n---\n\n${baseText}` : summaryPrompt;
+
+      await streamAssistantFromPrompt(payload, {
+        echoUser: false,
+        closeExamplesOnStart: true,
+        straplineText: 'SAMENVATTING',
+        showPostActions: 'data-only'
+      });
+
+      resetTextareaHeight();
+      return;
+    }
+
+    await streamAssistantFromPrompt(text, {
+      echoUser: true,
+      closeExamplesOnStart: true,
+      showPostActions: 'auto'
+    });
   }
 
   return {
