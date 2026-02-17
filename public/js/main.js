@@ -193,18 +193,12 @@ if (examplesToggle) {
 // ✅ Auto-start assistant greeting (hardcoded, no generation)
 // Intro will show only "Nieuw data verzoek" (handled in chatFlow.js)
 // ──────────────────────────────────────────────────────────
-// Auto-start assistant greeting (streamed, consistent UX)
 controller.setButtonsStreaming(false);
-
 if (chat && chat.children.length === 0) {
-  controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
-    echoUser: false,                  // no visible user message
-    closeExamplesOnStart: false,      // keep retrieval OFF
-    straplineText: STRAPLINE.autoStartText,
-    showPostActions: 'data-only'      // 👈 only "Nieuw data verzoek"
+  controller.renderStaticAssistantMessage(DEFAULT_WELCOME_PROMPT, {
+    straplineText: STRAPLINE.autoStartText
   });
 }
-
 
 // ──────────────────────────────────────────────────────────
 /** Context Pages (About / How it works / Included Data) */
