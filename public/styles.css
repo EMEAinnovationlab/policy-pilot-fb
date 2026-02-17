@@ -1086,8 +1086,8 @@ cursor: pointer;
 
 .pp-post-btn {
   appearance: none;
-  background: var(--medium-dark-brown)!important;
-  color: white!important;
+  border: 2px solid var(--medium-dark-brown)!important;
+  color: var(--black)!important;
   font-weight: 500!important;
   padding: 4px 20px!important;
   border-radius: 12px;
