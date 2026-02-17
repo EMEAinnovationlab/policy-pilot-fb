@@ -34,7 +34,7 @@ const parseMarkdown = (md) => (markedRef ? markedRef.parse(md || '') : (md || ''
 const STRAPLINE = {
   enabled: true,
   iconUrl: '/images/brand/chat_icon.png',
-  defaultText: 'POLICY PILOT',
+  defaultText: 'POLI PILOT',
   autoStartText: 'INTRODUCTIE',
   uppercase: true,
   letterSpacing: '0.25em',
@@ -77,8 +77,10 @@ const clearBtn = document.getElementById('clear');
 
 const examplesContainer = document.getElementById('example-prompts');
 const closeExamplesBtn = document.getElementById('close-examples');
-const exampleCards = document.querySelectorAll('.example');
 const examplesToggle = document.getElementById('toggle-examples');
+
+// Example cards may be replaced later by loadAndRenderExamplePrompts()
+const exampleCards = document.querySelectorAll('.example');
 
 // Carousel controls (must exist in your HTML)
 const examplesPrevBtn = document.getElementById('examples-prev');
@@ -118,6 +120,17 @@ const examples = {
   closeExamples: (opts) => closeExamples(examplesContainer, examplesToggle, opts)
 };
 
+// ✅ Always start with retrieval OFF (examples panel closed) on page load
+if (examplesContainer) {
+  examples.closeExamples({ animate: false, scroll: false });
+}
+
+// Ensure toggle visibility reflects closed state
+if (examplesToggle && examplesContainer) {
+  const open = !examplesContainer.classList.contains('hide');
+  examplesToggle.classList.toggle('hide', open);
+}
+
 // ──────────────────────────────────────────────────────────
 /** Chat controller */
 const controller = createChatController({
@@ -127,7 +140,7 @@ const controller = createChatController({
   getUseRetrieval
 });
 
-// Attach example fill handlers present at load
+// Attach example fill handlers present at initial load (in case HTML already had examples)
 attachExampleFillHandlers({
   exampleCards,
   input,
@@ -143,7 +156,10 @@ if (clearBtn) {
     if (chat) chat.innerHTML = '';
     controller.resetTextareaHeight();
     controller.clearConversationMemory?.();
-    examples.openExamples(); // opening examples => retrieval ON
+
+    // Clear should NOT auto-enable retrieval; keep panel closed by default
+    examples.closeExamples({ animate: true, scroll: true });
+
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   });
 }
@@ -161,17 +177,6 @@ if (input) {
   controller.autoGrowTextarea();
 }
 
-// Keep examples visible on load if chat is empty
-(function maybeShowExamples() {
-  if (!examplesContainer || !chat) return;
-  if (chat.children.length === 0) examples.openExamples(); // retrieval ON while open
-})();
-
-if (examplesToggle && examplesContainer) {
-  const open = !examplesContainer.classList.contains('hide');
-  examplesToggle.classList.toggle('hide', open);
-}
-
 if (closeExamplesBtn) {
   closeExamplesBtn.addEventListener('click', () =>
     examples.closeExamples({ animate: true, scroll: true })
@@ -186,8 +191,7 @@ if (examplesToggle) {
 
 // ──────────────────────────────────────────────────────────
 // ✅ Auto-start assistant greeting (hardcoded, no generation)
-// Must happen AFTER controller exists.
-// Also placed AFTER maybeShowExamples so examples can open on first load.
+// Intro will show only "Nieuw data verzoek" (handled in chatFlow.js)
 // ──────────────────────────────────────────────────────────
 controller.setButtonsStreaming(false);
 if (chat && chat.children.length === 0) {
@@ -203,7 +207,7 @@ const modal = document.getElementById('content-modal');
 const modalTitle = document.getElementById('pp-modal-title');
 const modalContent = document.getElementById('pp-modal-content');
 
-const titles = { about: 'Over Policy Pilot', how: 'Hoe het werkt', data: 'Data' };
+const titles = { about: 'Over Poli Pilot', how: 'Hoe het werkt', data: 'Data' };
 const pagesOrder = ['about', 'how', 'data'];
 
 function setModalOpen(open) {
@@ -347,8 +351,7 @@ function setupExamplesCarousel() {
     index: 0,
     perPage: 2,
     realPages: 1,
-    isJumping: false,
-    isSetup: false
+    isJumping: false
   });
 
   const getPerPage = () => (window.matchMedia('(max-width: 640px)').matches ? 1 : 2);
@@ -363,7 +366,6 @@ function setupExamplesCarousel() {
     removeClones();
     const realCards = getRealCards();
     const per = state.perPage;
-
     if (realCards.length <= per) return;
 
     const head = realCards.slice(0, per);
@@ -438,7 +440,6 @@ function setupExamplesCarousel() {
       updateUI();
       return;
     }
-
     if (domPage === state.realPages + 1) {
       state.index = 0;
       scrollToRealIndex(state.index, 'auto');
@@ -456,13 +457,10 @@ function setupExamplesCarousel() {
   const recompute = () => {
     state.perPage = getPerPage();
     computeRealPages();
-
     buildClones();
     computeRealPages();
-
     buildDots();
     updateUI();
-
     scrollToRealIndex(state.index, 'auto');
   };
 
@@ -504,7 +502,9 @@ async function loadAndRenderExamplePrompts() {
   try {
     const res = await fetch('/api/example-prompts');
     const data = await res.json();
-    if (!res.ok || !data?.ok || !Array.isArray(data.items)) throw new Error(data?.error || 'Invalid response');
+    if (!res.ok || !data?.ok || !Array.isArray(data.items)) {
+      throw new Error(data?.error || 'Invalid response');
+    }
 
     grid.innerHTML = data.items.map(row => {
       const title = preferNl

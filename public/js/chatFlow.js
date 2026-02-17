@@ -171,7 +171,11 @@ export function createChatController({
       lastAssistantText = markdownText;
     }
 
-    return assistantDiv;
+   // ✅ Intro should only have "Nieuw data verzoek"
+addPostActions(assistantDiv, 'data-only');
+
+return assistantDiv;
+
   }
 
   async function streamAssistantFromPrompt(
