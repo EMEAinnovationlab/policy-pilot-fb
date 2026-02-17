@@ -24,75 +24,55 @@ export function createChatController({
     return div;
   }
 
-  const show = el => el && el.classList.remove('hide');
-  const hide = el => el && el.classList.add('hide');
+  const show = (el) => el && el.classList.remove('hide');
+  const hide = (el) => el && el.classList.add('hide');
 
-function setButtonsStreaming(isStreaming) {
-  if (isStreaming) {
-    if (dom.sendBtn) {
-      dom.sendBtn.disabled = true;
-      dom.sendBtn.style.opacity = '0.6';
-      dom.sendBtn.style.cursor = 'not-allowed';
-
-      // ✅ mark as loading (used by CSS hover rule)
-      dom.sendBtn.dataset.loading = '1';
-    }
-    if (dom.input) {
-      dom.input.disabled = true;
-      dom.input.setAttribute('aria-busy', 'true');
-    }
-    show(dom.stopBtn);
-  } else {
-    if (dom.sendBtn) {
-      dom.sendBtn.disabled = false;
-      dom.sendBtn.style.opacity = '1';
-      dom.sendBtn.style.cursor = 'pointer';
-
-      // ✅ remove loading marker
-      delete dom.sendBtn.dataset.loading;
-    }
-    if (dom.input) {
-      dom.input.disabled = false;
-      dom.input.removeAttribute('aria-busy');
-    }
-    hide(dom.stopBtn);
+  // Markdown parser: prefer global marked, else render as plain text
+  function safeMarkdownToHtml(md) {
+    try {
+      // window.marked is set in main.js
+      if (typeof window !== 'undefined' && window.marked?.parse) {
+        return window.marked.parse(md || '');
+      }
+    } catch {}
+    const escaped = String(md || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return `<pre style="white-space:pre-wrap;margin:0">${escaped}</pre>`;
   }
 
-    // ✅ Render a hardcoded (non-generated) assistant message, but still seed memory
-  function renderStaticAssistantMessage(
-    markdownText,
-    { straplineText } = {}
-  ) {
-    const assistantDiv = append('assistant', '');
-    assistantDiv.classList.add('initializing');
+  function setButtonsStreaming(isStreaming) {
+    if (isStreaming) {
+      if (dom.sendBtn) {
+        dom.sendBtn.disabled = true;
+        dom.sendBtn.style.opacity = '0.6';
+        dom.sendBtn.style.cursor = 'not-allowed';
 
-    const headerText =
-      straplineText ?? config.STRAPLINE.autoStartText ?? config.STRAPLINE.defaultText;
+        // ✅ mark as loading (used by CSS hover rule)
+        dom.sendBtn.dataset.loading = '1';
+      }
+      if (dom.input) {
+        dom.input.disabled = true;
+        dom.input.setAttribute('aria-busy', 'true');
+      }
+      show(dom.stopBtn);
+    } else {
+      if (dom.sendBtn) {
+        dom.sendBtn.disabled = false;
+        dom.sendBtn.style.opacity = '1';
+        dom.sendBtn.style.cursor = 'pointer';
 
-    renderAssistantHeader(
-      assistantDiv,
-      headerText,
-      config.STRAPLINE.iconUrl,
-      config.STRAPLINE.defaultText
-    );
-
-    const contentEl = getOrCreateContentContainer(assistantDiv);
-
-    // Render markdown locally (no backend call)
-    // renderMarkdownAndFadeNew expects full markdown string each time
-    renderMarkdownAndFadeNew(contentEl, markdownText || '');
-
-    requestAnimationFrame(() => assistantDiv.classList.add('ready'));
-
-    // ✅ Seed client-side memory so the backend sees it as context later
-    if (markdownText && String(markdownText).trim()) {
-      conversation.push({ role: 'assistant', content: String(markdownText) });
+        // ✅ remove loading marker
+        delete dom.sendBtn.dataset.loading;
+      }
+      if (dom.input) {
+        dom.input.disabled = false;
+        dom.input.removeAttribute('aria-busy');
+      }
+      hide(dom.stopBtn);
     }
-
-    return assistantDiv;
   }
-
-}
 
   function showThinking(div, on = true) {
     if (on && !div._spinner) {
@@ -131,6 +111,36 @@ function setButtonsStreaming(isStreaming) {
     conversation = [];
   }
 
+  // ✅ Render a hardcoded (non-generated) assistant message, but still seed memory
+  function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
+    const assistantDiv = append('assistant', '');
+    assistantDiv.classList.add('initializing');
+
+    const headerText =
+      straplineText ?? config.STRAPLINE.autoStartText ?? config.STRAPLINE.defaultText;
+
+    renderAssistantHeader(
+      assistantDiv,
+      headerText,
+      config.STRAPLINE.iconUrl,
+      config.STRAPLINE.defaultText
+    );
+
+    const contentEl = getOrCreateContentContainer(assistantDiv);
+
+    // Render markdown locally (no backend call)
+    renderMarkdownAndFadeNew(contentEl, markdownText || '');
+
+    requestAnimationFrame(() => assistantDiv.classList.add('ready'));
+
+    // ✅ Seed client-side memory so the backend sees it as context later
+    if (markdownText && String(markdownText).trim()) {
+      conversation.push({ role: 'assistant', content: String(markdownText) });
+    }
+
+    return assistantDiv;
+  }
+
   async function streamAssistantFromPrompt(
     prompt,
     { echoUser = true, closeExamplesOnStart = true, straplineText } = {}
@@ -138,11 +148,11 @@ function setButtonsStreaming(isStreaming) {
     // ✅ Capture retrieval state BEFORE we possibly close examples
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
 
-    if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
+    if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
     // UI: render user message (but DO NOT commit it to memory yet)
     if (echoUser) {
-      append('user', marked.parse(prompt));
+      append('user', safeMarkdownToHtml(prompt));
       resetTextareaHeight();
     }
 
@@ -229,7 +239,7 @@ function setButtonsStreaming(isStreaming) {
                 gotAnyToken = true;
               }
 
-              assistantDiv._rawTextBuffer += evt.text;
+              assistantDiv._rawTextBuffer += evt.text || '';
               renderMarkdownAndFadeNew(contentEl, assistantDiv._rawTextBuffer);
               dom.chat.scrollTop = dom.chat.scrollHeight;
 
@@ -249,6 +259,7 @@ function setButtonsStreaming(isStreaming) {
               err.style.cssText = 'color:red; margin-top:6px;';
               err.textContent = `[Error] ${evt.message}`;
               assistantDiv.appendChild(err);
+
             } else if (evt.type === 'done') {
               // no-op
             }
@@ -298,12 +309,11 @@ function setButtonsStreaming(isStreaming) {
   return {
     sendMessage,
     streamAssistantFromPrompt,
-    renderStaticAssistantMessage, 
+    renderStaticAssistantMessage,
     autoGrowTextarea,
     resetTextareaHeight,
     setButtonsStreaming,
     stopStreaming,
     clearConversationMemory
   };
-
 }
