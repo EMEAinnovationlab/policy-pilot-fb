@@ -298,7 +298,7 @@ function setButtonsStreaming(isStreaming) {
   return {
     sendMessage,
     streamAssistantFromPrompt,
-    renderStaticAssistantMessage, // ✅ add this
+    renderStaticAssistantMessage, 
     autoGrowTextarea,
     resetTextareaHeight,
     setButtonsStreaming,
