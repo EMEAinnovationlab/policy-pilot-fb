@@ -5,7 +5,7 @@ import { renderMarkdownAndFadeNew } from './markdown.js';
 export function createChatController({
   dom,        // { chat, input, sendBtn, stopBtn, clearBtn }
   examples,   // { closeExamples, openExamples }
-  config,     // { STRAPLINE, DEFAULT_WELCOME_PROMPT }
+  config,     // { STRAPLINE, DEFAULT_WELCOME_PROMPT, SUMMARY_PROMPT }
   getUseRetrieval
 }) {
   let controller = null;
@@ -14,6 +14,9 @@ export function createChatController({
   // IMPORTANT: We only append a full turn (user+assistant) AFTER the assistant finishes,
   // so history is always "complete turns" and never half-baked.
   let conversation = [];
+
+  // Keep the latest assistant output (for summary button)
+  let lastAssistantText = '';
 
   function append(role, html = '') {
     const div = document.createElement('div');
@@ -24,23 +27,8 @@ export function createChatController({
     return div;
   }
 
-  const show = (el) => el && el.classList.remove('hide');
-  const hide = (el) => el && el.classList.add('hide');
-
-  // Markdown parser: prefer global marked, else render as plain text
-  function safeMarkdownToHtml(md) {
-    try {
-      // window.marked is set in main.js
-      if (typeof window !== 'undefined' && window.marked?.parse) {
-        return window.marked.parse(md || '');
-      }
-    } catch {}
-    const escaped = String(md || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    return `<pre style="white-space:pre-wrap;margin:0">${escaped}</pre>`;
-  }
+  const show = el => el && el.classList.remove('hide');
+  const hide = el => el && el.classList.add('hide');
 
   function setButtonsStreaming(isStreaming) {
     if (isStreaming) {
@@ -48,8 +36,6 @@ export function createChatController({
         dom.sendBtn.disabled = true;
         dom.sendBtn.style.opacity = '0.6';
         dom.sendBtn.style.cursor = 'not-allowed';
-
-        // ✅ mark as loading (used by CSS hover rule)
         dom.sendBtn.dataset.loading = '1';
       }
       if (dom.input) {
@@ -62,8 +48,6 @@ export function createChatController({
         dom.sendBtn.disabled = false;
         dom.sendBtn.style.opacity = '1';
         dom.sendBtn.style.cursor = 'pointer';
-
-        // ✅ remove loading marker
         delete dom.sendBtn.dataset.loading;
       }
       if (dom.input) {
@@ -109,6 +93,59 @@ export function createChatController({
   // ✅ Clear memory (call this when you start a new chat)
   function clearConversationMemory() {
     conversation = [];
+    lastAssistantText = '';
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Post-actions UI (added after each completed assistant msg)
+  // ──────────────────────────────────────────────────────────
+  function addPostActions(assistantDiv) {
+    if (!assistantDiv) return;
+    if (assistantDiv.querySelector('.pp-post-actions')) return;
+
+    const actions = document.createElement('div');
+    actions.className = 'pp-post-actions';
+
+    const btnData = document.createElement('button');
+    btnData.type = 'button';
+    btnData.className = 'pp-post-btn';
+    btnData.textContent = 'Nieuw data verzoek';
+    btnData.addEventListener('click', () => {
+      examples?.openExamples?.();
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    });
+
+    const btnSummary = document.createElement('button');
+    btnSummary.type = 'button';
+    btnSummary.className = 'pp-post-btn';
+    btnSummary.textContent = 'Maak samenvatting';
+    btnSummary.addEventListener('click', async () => {
+      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+      if (!summaryPrompt) {
+        // If no prompt is configured, do nothing (or you can show a tiny inline error)
+        return;
+      }
+
+      // Summarize the latest assistant answer by default
+      const baseText = (lastAssistantText || '').trim();
+      const payload = baseText
+        ? `${summaryPrompt}\n\n---\n\n${baseText}`
+        : summaryPrompt;
+
+      // Don’t echo as a user message; it should feel like a tool action
+      await streamAssistantFromPrompt(payload, {
+        echoUser: false,
+        closeExamplesOnStart: true,
+        straplineText: 'SAMENVATTING'
+      });
+    });
+
+    actions.appendChild(btnData);
+    actions.appendChild(btnSummary);
+
+    // Put actions under the assistant content container if present
+    const content = assistantDiv.querySelector('.content') || assistantDiv;
+    content.appendChild(actions);
   }
 
   // ✅ Render a hardcoded (non-generated) assistant message, but still seed memory
@@ -128,16 +165,16 @@ export function createChatController({
 
     const contentEl = getOrCreateContentContainer(assistantDiv);
 
-    // Render markdown locally (no backend call)
     renderMarkdownAndFadeNew(contentEl, markdownText || '');
 
     requestAnimationFrame(() => assistantDiv.classList.add('ready'));
 
-    // ✅ Seed client-side memory so the backend sees it as context later
     if (markdownText && String(markdownText).trim()) {
       conversation.push({ role: 'assistant', content: String(markdownText) });
+      lastAssistantText = String(markdownText);
     }
 
+    addPostActions(assistantDiv);
     return assistantDiv;
   }
 
@@ -148,11 +185,12 @@ export function createChatController({
     // ✅ Capture retrieval state BEFORE we possibly close examples
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
 
-    if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
+    if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
 
     // UI: render user message (but DO NOT commit it to memory yet)
     if (echoUser) {
-      append('user', safeMarkdownToHtml(prompt));
+      // marked is global (loaded in main.js)
+      append('user', window.marked?.parse ? window.marked.parse(prompt) : String(prompt));
       resetTextareaHeight();
     }
 
@@ -170,11 +208,9 @@ export function createChatController({
     let straplineShown = false;
     let contentEl = null;
 
-    // Buffer for this assistant turn
     assistantDiv._rawTextBuffer = '';
 
     try {
-      // ✅ Send only *completed* history (previous turns)
       const resp = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,6 +236,7 @@ export function createChatController({
         }
         contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
         assistantDiv.classList.add('ready');
+        addPostActions(assistantDiv);
         return;
       }
 
@@ -270,12 +307,15 @@ export function createChatController({
       }
 
       // ✅ Commit the full turn to memory (user + assistant) AFTER completion.
-      if (echoUser) {
-        conversation.push({ role: 'user', content: prompt });
-      }
+      if (echoUser) conversation.push({ role: 'user', content: prompt });
+
       if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
-        conversation.push({ role: 'assistant', content: assistantDiv._rawTextBuffer });
+        const finalText = assistantDiv._rawTextBuffer;
+        conversation.push({ role: 'assistant', content: finalText });
+        lastAssistantText = finalText;
       }
+
+      addPostActions(assistantDiv);
 
     } catch {
       showThinking(assistantDiv, false);
@@ -294,6 +334,7 @@ export function createChatController({
       err.style.cssText = 'color:red; margin-top:6px;';
       err.textContent = msg;
       assistantDiv.appendChild(err);
+      addPostActions(assistantDiv);
     } finally {
       setButtonsStreaming(false);
       controller = null;

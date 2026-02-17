@@ -1071,6 +1071,33 @@ cursor: pointer;
 
 
 
+.pp-post-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.pp-post-btn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pp-post-btn:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+.pp-post-btn:active {
+  transform: translateY(1px);
+}
+
+
 
 
 

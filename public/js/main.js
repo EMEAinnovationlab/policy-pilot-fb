@@ -47,18 +47,26 @@ You are the assistant in a chat UI. Greet the user briefly and offer 2–3 concr
 Keep it concise and friendly; no emojis. Avoid generic fluff.
 `;
 
+let SUMMARY_PROMPT = '';
+
+
 // Load introduction prompt from backend (via Vercel /api route)
 async function loadIntroPromptFromServer() {
   try {
     const res = await fetch('/api/project-settings', { credentials: 'same-origin' });
     const data = await res.json();
     if (!res.ok || !data?.ok) throw new Error(data?.error || 'Failed to fetch settings');
+
     const intro = data.settings?.introduction_prompt;
     if (intro && intro.trim()) DEFAULT_WELCOME_PROMPT = intro.trim();
+
+    const summary = data.settings?.summary_prompt;
+    if (summary && summary.trim()) SUMMARY_PROMPT = summary.trim();
   } catch (err) {
     console.warn('Intro prompt fallback used:', err?.message || err);
   }
 }
+
 await loadIntroPromptFromServer();
 
 // ──────────────────────────────────────────────────────────
@@ -117,9 +125,10 @@ const examples = {
 const controller = createChatController({
   dom: { chat, input, sendBtn, stopBtn, clearBtn },
   examples,
-  config: { STRAPLINE, DEFAULT_WELCOME_PROMPT },
+  config: { STRAPLINE, DEFAULT_WELCOME_PROMPT, SUMMARY_PROMPT },
   getUseRetrieval
 });
+
 
 // Attach example fill handlers present at load
 attachExampleFillHandlers({
