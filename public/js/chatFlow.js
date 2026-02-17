@@ -5,11 +5,16 @@ import { renderMarkdownAndFadeNew } from './markdown.js';
 export function createChatController({
   dom,
   examples,
-  config,
+  config,     // { STRAPLINE, SUMMARY_PROMPT }
   getUseRetrieval
 }) {
   let controller = null;
+
+  // ✅ Client-side conversation memory that we send to the backend.
+  // We only append completed turns.
   let conversation = [];
+
+  // Latest completed assistant output (used for summary)
   let lastAssistantText = '';
 
   function append(role, html = '') {
@@ -76,8 +81,11 @@ export function createChatController({
     dom.input.style.height = 'auto';
     const newHeight = Math.min(dom.input.scrollHeight, 300);
     dom.input.style.height = newHeight + 'px';
-    dom.input.style.overflowY =
-      dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
+    dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
+  }
+
+  function stopStreaming() {
+    try { controller?.abort(); } catch {}
   }
 
   function clearConversationMemory() {
@@ -106,12 +114,8 @@ export function createChatController({
     btnData.textContent = 'Nieuw data verzoek';
     btnData.addEventListener('click', () => {
       examples?.openExamples?.();
-      window.scrollTo({
-        top: document.documentElement.scrollHeight,
-        behavior: 'smooth'
-      });
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     });
-
     actions.appendChild(btnData);
 
     // Only show summary button if mode === true
@@ -130,11 +134,12 @@ export function createChatController({
           ? `${summaryPrompt}\n\n---\n\n${baseText}`
           : summaryPrompt;
 
+        // Summary output should NOT show summary button again.
         await streamAssistantFromPrompt(payload, {
           echoUser: false,
           closeExamplesOnStart: true,
           straplineText: 'SAMENVATTING',
-          showPostActions: 'data-only' // 👈 only data button after summary
+          showPostActions: 'data-only'
         });
       });
 
@@ -145,58 +150,29 @@ export function createChatController({
     content.appendChild(actions);
   }
 
-  // Intro (never shows buttons)
-  function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
-    const assistantDiv = append('assistant', '');
-    assistantDiv.classList.add('initializing');
-
-    const headerText =
-      straplineText ??
-      config.STRAPLINE.autoStartText ??
-      config.STRAPLINE.defaultText;
-
-    renderAssistantHeader(
-      assistantDiv,
-      headerText,
-      config.STRAPLINE.iconUrl,
-      config.STRAPLINE.defaultText
-    );
-
-    const contentEl = getOrCreateContentContainer(assistantDiv);
-    renderMarkdownAndFadeNew(contentEl, markdownText || '');
-    requestAnimationFrame(() => assistantDiv.classList.add('ready'));
-
-    if (markdownText?.trim()) {
-      conversation.push({ role: 'assistant', content: markdownText });
-      lastAssistantText = markdownText;
-    }
-
-   // ✅ Intro should only have "Nieuw data verzoek"
-addPostActions(assistantDiv, 'data-only');
-
-return assistantDiv;
-
-  }
-
   async function streamAssistantFromPrompt(
     prompt,
     {
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true
+      showPostActions = true // can be true | "data-only" | false
     } = {}
   ) {
-    const useRetrievalForThisRequest =
-      !!(getUseRetrieval && getUseRetrieval());
+    // ✅ Determine retrieval state for this request
+    const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
 
-    if (closeExamplesOnStart)
-      examples?.closeExamples?.({ animate: true, scroll: true });
+    // ✅ If this request is a "normal chat" (no retrieval), we never show the summary button.
+    // So we downgrade the post-actions mode to data-only.
+    const effectivePostActions =
+      showPostActions === true
+        ? (useRetrievalForThisRequest ? true : 'data-only')
+        : showPostActions; // if caller forced data-only/false, respect it
+
+    if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
     if (echoUser) {
-      const html = window.marked?.parse
-        ? window.marked.parse(prompt)
-        : prompt;
+      const html = window.marked?.parse ? window.marked.parse(prompt) : String(prompt);
       append('user', html);
       resetTextareaHeight();
     }
@@ -210,9 +186,7 @@ return assistantDiv;
 
     const headerText =
       straplineText ??
-      (echoUser
-        ? config.STRAPLINE.defaultText
-        : config.STRAPLINE.autoStartText);
+      (echoUser ? config.STRAPLINE.defaultText : config.STRAPLINE.autoStartText);
 
     let straplineShown = false;
     let contentEl = null;
@@ -230,6 +204,28 @@ return assistantDiv;
         }),
         signal: controller.signal
       });
+
+      if (!resp.ok || !resp.body) {
+        showThinking(assistantDiv, false);
+
+        if (!straplineShown) {
+          renderAssistantHeader(
+            assistantDiv,
+            headerText,
+            config.STRAPLINE.iconUrl,
+            config.STRAPLINE.defaultText
+          );
+          straplineShown = true;
+          contentEl = getOrCreateContentContainer(assistantDiv);
+        }
+
+        contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
+        assistantDiv.classList.add('ready');
+
+        // ✅ Buttons only after completion
+        addPostActions(assistantDiv, effectivePostActions);
+        return;
+      }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -249,51 +245,86 @@ return assistantDiv;
           const payload = line.slice(5).trim();
           if (!payload) continue;
 
-          const evt = JSON.parse(payload);
+          try {
+            const evt = JSON.parse(payload);
 
-          if (evt.type === 'token') {
-            if (!gotAnyToken) {
-              showThinking(assistantDiv, false);
-              renderAssistantHeader(
-                assistantDiv,
-                headerText,
-                config.STRAPLINE.iconUrl,
-                config.STRAPLINE.defaultText
-              );
-              straplineShown = true;
-              contentEl = getOrCreateContentContainer(assistantDiv);
-              requestAnimationFrame(() =>
-                assistantDiv.classList.add('ready')
-              );
-              gotAnyToken = true;
+            if (evt.type === 'token') {
+              if (!gotAnyToken) {
+                showThinking(assistantDiv, false);
+                renderAssistantHeader(
+                  assistantDiv,
+                  headerText,
+                  config.STRAPLINE.iconUrl,
+                  config.STRAPLINE.defaultText
+                );
+                straplineShown = true;
+                contentEl = getOrCreateContentContainer(assistantDiv);
+                requestAnimationFrame(() => assistantDiv.classList.add('ready'));
+                gotAnyToken = true;
+              }
+
+              assistantDiv._rawTextBuffer += evt.text || '';
+              renderMarkdownAndFadeNew(contentEl, assistantDiv._rawTextBuffer);
+              dom.chat.scrollTop = dom.chat.scrollHeight;
+
+            } else if (evt.type === 'error') {
+              if (!straplineShown) {
+                showThinking(assistantDiv, false);
+                renderAssistantHeader(
+                  assistantDiv,
+                  headerText,
+                  config.STRAPLINE.iconUrl,
+                  config.STRAPLINE.defaultText
+                );
+                straplineShown = true;
+                contentEl = getOrCreateContentContainer(assistantDiv);
+              }
+              const err = document.createElement('div');
+              err.style.cssText = 'color:red; margin-top:6px;';
+              err.textContent = `[Error] ${evt.message}`;
+              assistantDiv.appendChild(err);
             }
-
-            assistantDiv._rawTextBuffer += evt.text || '';
-            renderMarkdownAndFadeNew(
-              contentEl,
-              assistantDiv._rawTextBuffer
-            );
-            dom.chat.scrollTop = dom.chat.scrollHeight;
+          } catch {
+            // ignore parse errors
           }
         }
       }
 
-      if (echoUser)
-        conversation.push({ role: 'user', content: prompt });
+      // ✅ Commit full turn AFTER completion
+      if (echoUser) conversation.push({ role: 'user', content: prompt });
 
-      if (assistantDiv._rawTextBuffer?.trim()) {
-        conversation.push({
-          role: 'assistant',
-          content: assistantDiv._rawTextBuffer
-        });
-        lastAssistantText = assistantDiv._rawTextBuffer;
+      if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
+        const finalText = assistantDiv._rawTextBuffer;
+        conversation.push({ role: 'assistant', content: finalText });
+        lastAssistantText = finalText;
       }
 
-      // 👇 Add buttons AFTER completion
-      addPostActions(assistantDiv, showPostActions);
+      // ✅ Buttons only after completion
+      addPostActions(assistantDiv, effectivePostActions);
 
-    } catch (err) {
-      console.error(err);
+    } catch {
+      showThinking(assistantDiv, false);
+
+      if (!straplineShown) {
+        renderAssistantHeader(
+          assistantDiv,
+          headerText,
+          config.STRAPLINE.iconUrl,
+          config.STRAPLINE.defaultText
+        );
+        straplineShown = true;
+        contentEl = getOrCreateContentContainer(assistantDiv);
+      }
+
+      const msg = controller ? '[Connection aborted]' : '[Connection error]';
+      const err = document.createElement('div');
+      err.style.cssText = 'color:red; margin-top:6px;';
+      err.textContent = msg;
+      assistantDiv.appendChild(err);
+
+      // ✅ Buttons only after completion
+      addPostActions(assistantDiv, effectivePostActions);
+
     } finally {
       setButtonsStreaming(false);
       controller = null;
@@ -307,17 +338,17 @@ return assistantDiv;
     await streamAssistantFromPrompt(text, {
       echoUser: true,
       closeExamplesOnStart: true,
-      showPostActions: true
+      showPostActions: true // will auto-downgrade to data-only if retrieval was off
     });
   }
 
   return {
     sendMessage,
     streamAssistantFromPrompt,
-    renderStaticAssistantMessage,
     autoGrowTextarea,
     resetTextareaHeight,
     setButtonsStreaming,
+    stopStreaming,
     clearConversationMemory
   };
 }

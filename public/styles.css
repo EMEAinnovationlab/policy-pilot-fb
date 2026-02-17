@@ -68,7 +68,7 @@ body {
   min-height: 100vh;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  background-image: url(images/brand/background-texture.png);
+  /* background-image: url(images/brand/background-texture.png); */
   background-size:cover;
   background-position: bottom left;
 }

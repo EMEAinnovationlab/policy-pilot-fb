@@ -34,7 +34,7 @@ const parseMarkdown = (md) => (markedRef ? markedRef.parse(md || '') : (md || ''
 const STRAPLINE = {
   enabled: true,
   iconUrl: '/images/brand/chat_icon.png',
-  defaultText: 'POLI PILOT',
+  defaultText: 'POLICY PILOT',
   autoStartText: 'INTRODUCTIE',
   uppercase: true,
   letterSpacing: '0.25em',
@@ -194,11 +194,24 @@ if (examplesToggle) {
 // Intro will show only "Nieuw data verzoek" (handled in chatFlow.js)
 // ──────────────────────────────────────────────────────────
 controller.setButtonsStreaming(false);
+
 if (chat && chat.children.length === 0) {
-  controller.renderStaticAssistantMessage(DEFAULT_WELCOME_PROMPT, {
-    straplineText: STRAPLINE.autoStartText
+  controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
+    echoUser: false,                  // no visible user message
+    closeExamplesOnStart: false,      // keep retrieval OFF
+    straplineText: STRAPLINE.autoStartText,
+    showPostActions: 'data-only'      // 👈 only "Nieuw data verzoek"
   });
 }
+
+
+controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
+  echoUser: false,
+  closeExamplesOnStart: false,      // keep retrieval OFF
+  straplineText: STRAPLINE.autoStartText,
+  showPostActions: 'data-only'      // only "Nieuw data verzoek"
+});
+
 
 // ──────────────────────────────────────────────────────────
 /** Context Pages (About / How it works / Included Data) */
