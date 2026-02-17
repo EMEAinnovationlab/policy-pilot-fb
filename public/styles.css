@@ -220,7 +220,7 @@ main {
 .chat-wrapper {
   max-width: 1000px;
   min-width: 1000px;
-  max-height: 90vh;
+  max-height: 95vh;
   background-color: var(--white);
   box-shadow: var(--shadow-bg-drop-suttle);
   border-radius: var(--r-sm);
@@ -252,6 +252,7 @@ main {
   flex-direction: column;
   gap: var(--space-2);
   padding: 2.5vw;
+  padding-top: 150px;
   
 }
 }
@@ -640,7 +641,7 @@ textarea {
 
 /* ====== Header ====== */
 .site-header {
-  position: absolute; top: 0; z-index: 50;
+  position: relative; top: 0; z-index: 50;
   background: transparent;
   padding: 10px 16px;
 }
