@@ -127,18 +127,18 @@ export function createChatController({
         : summaryPrompt;
 
       // Don’t echo as user; it’s a UI action
+      // ✅ IMPORTANT: no buttons under the summary output
       await streamAssistantFromPrompt(payload, {
         echoUser: false,
         closeExamplesOnStart: true,
         straplineText: 'SAMENVATTING',
-        showPostActions: true // summary result should get buttons
+        showPostActions: false
       });
     });
 
     actions.appendChild(btnData);
     actions.appendChild(btnSummary);
 
-    // Put actions under the assistant content container if present
     const content = assistantDiv.querySelector('.content') || assistantDiv;
     content.appendChild(actions);
   }
@@ -179,7 +179,7 @@ export function createChatController({
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true // ✅ controls whether we append buttons when done
+      showPostActions = true
     } = {}
   ) {
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
@@ -187,7 +187,6 @@ export function createChatController({
     if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
     if (echoUser) {
-      // marked is global (loaded in main.js)
       const html = window.marked?.parse ? window.marked.parse(prompt) : String(prompt);
       append('user', html);
       resetTextareaHeight();
@@ -236,7 +235,6 @@ export function createChatController({
         contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
         assistantDiv.classList.add('ready');
 
-        // ✅ ONLY after completion (even on error)
         if (showPostActions) addPostActions(assistantDiv);
         return;
       }
@@ -334,7 +332,6 @@ export function createChatController({
       err.textContent = msg;
       assistantDiv.appendChild(err);
 
-      // ✅ Only after completion
       if (showPostActions) addPostActions(assistantDiv);
 
     } finally {
@@ -346,7 +343,33 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
+
+    // Optional command: if user types "maak samenvatting", don't show buttons on summary output
+    if (text.toLowerCase() === 'maak samenvatting') {
+      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+      if (!summaryPrompt) return;
+
+      const baseText = (lastAssistantText || '').trim();
+      const payload = baseText
+        ? `${summaryPrompt}\n\n---\n\n${baseText}`
+        : summaryPrompt;
+
+      await streamAssistantFromPrompt(payload, {
+        echoUser: false,
+        closeExamplesOnStart: true,
+        straplineText: 'SAMENVATTING',
+        showPostActions: false
+      });
+
+      resetTextareaHeight();
+      return;
+    }
+
+    await streamAssistantFromPrompt(text, {
+      echoUser: true,
+      closeExamplesOnStart: true,
+      showPostActions: true
+    });
   }
 
   return {

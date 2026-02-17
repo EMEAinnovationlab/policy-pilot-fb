@@ -16,7 +16,7 @@ export function injectStraplineStyles({ uppercase, letterSpacing, fontSize, colo
   document.head.appendChild(style);
 }
 
-export function renderAssistantHeader(assistantDiv, straplineText, iconUrl, fallback = 'POLI PILOT') {
+export function renderAssistantHeader(assistantDiv, straplineText, iconUrl, fallback = 'POLICY PILOT') {
   let header = assistantDiv.querySelector('.strapline');
   if (!header) {
     header = document.createElement('div');

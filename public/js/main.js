@@ -203,7 +203,7 @@ const modal = document.getElementById('content-modal');
 const modalTitle = document.getElementById('pp-modal-title');
 const modalContent = document.getElementById('pp-modal-content');
 
-const titles = { about: 'Over Poli Pilot', how: 'Hoe het werkt', data: 'Data' };
+const titles = { about: 'Over Policy Pilot', how: 'Hoe het werkt', data: 'Data' };
 const pagesOrder = ['about', 'how', 'data'];
 
 function setModalOpen(open) {
