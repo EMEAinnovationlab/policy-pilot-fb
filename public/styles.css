@@ -1060,7 +1060,7 @@ cursor: pointer;
 
 .pp-table th:nth-child(1),
 .pp-table td:nth-child(1) {
-  width: 80%;   /* Document column */
+  width: 60%;   /* Document column */
 }
 
 .pp-table th:nth-child(2),
