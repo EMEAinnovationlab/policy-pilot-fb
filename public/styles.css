@@ -658,7 +658,7 @@ textarea {
 /* Brand */
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;}
 .logo { width: 50px;}
-.brand-mark { display: inline-flex; align-items: center; justify-content: center; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; }
 .brand-text { display: grid; line-height: 1; }
 .brand-title {
   font-family: var(--font-serif, "DM Serif Display", serif);
@@ -671,7 +671,7 @@ textarea {
 }
 
 /* Nav */
-.main-nav { display: flex; align-items: center; gap: 48px; }
+.main-nav { display: flex; align-items: center; gap: 30px; }
 .nav-link {
     color: var(--black);
     font-family: var(--font-sans);
