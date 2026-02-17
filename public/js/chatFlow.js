@@ -15,7 +15,7 @@ export function createChatController({
   // so history is always "complete turns" and never half-baked.
   let conversation = [];
 
-  // Keep the latest assistant output (for summary button)
+  // Keep latest completed assistant output (for summary button)
   let lastAssistantText = '';
 
   function append(role, html = '') {
@@ -85,19 +85,17 @@ export function createChatController({
     dom.input.style.overflowY = dom.input.scrollHeight > 300 ? 'auto' : 'hidden';
   }
 
-  // ✅ Stop streaming (optional to wire in main.js)
   function stopStreaming() {
     try { controller?.abort(); } catch {}
   }
 
-  // ✅ Clear memory (call this when you start a new chat)
   function clearConversationMemory() {
     conversation = [];
     lastAssistantText = '';
   }
 
   // ──────────────────────────────────────────────────────────
-  // Post-actions UI (added after each completed assistant msg)
+  // Post-actions UI (added AFTER completion only)
   // ──────────────────────────────────────────────────────────
   function addPostActions(assistantDiv) {
     if (!assistantDiv) return;
@@ -121,22 +119,19 @@ export function createChatController({
     btnSummary.textContent = 'Maak samenvatting';
     btnSummary.addEventListener('click', async () => {
       const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
-      if (!summaryPrompt) {
-        // If no prompt is configured, do nothing (or you can show a tiny inline error)
-        return;
-      }
+      if (!summaryPrompt) return;
 
-      // Summarize the latest assistant answer by default
       const baseText = (lastAssistantText || '').trim();
       const payload = baseText
         ? `${summaryPrompt}\n\n---\n\n${baseText}`
         : summaryPrompt;
 
-      // Don’t echo as a user message; it should feel like a tool action
+      // Don’t echo as user; it’s a UI action
       await streamAssistantFromPrompt(payload, {
         echoUser: false,
         closeExamplesOnStart: true,
-        straplineText: 'SAMENVATTING'
+        straplineText: 'SAMENVATTING',
+        showPostActions: true // summary result should get buttons
       });
     });
 
@@ -148,7 +143,7 @@ export function createChatController({
     content.appendChild(actions);
   }
 
-  // ✅ Render a hardcoded (non-generated) assistant message, but still seed memory
+  // ✅ Hardcoded intro message (NO post-actions by design)
   function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
     const assistantDiv = append('assistant', '');
     assistantDiv.classList.add('initializing');
@@ -166,31 +161,35 @@ export function createChatController({
     const contentEl = getOrCreateContentContainer(assistantDiv);
 
     renderMarkdownAndFadeNew(contentEl, markdownText || '');
-
     requestAnimationFrame(() => assistantDiv.classList.add('ready'));
 
+    // Seed memory
     if (markdownText && String(markdownText).trim()) {
       conversation.push({ role: 'assistant', content: String(markdownText) });
       lastAssistantText = String(markdownText);
     }
 
-    addPostActions(assistantDiv);
+    // ❌ IMPORTANT: no buttons on intro
     return assistantDiv;
   }
 
   async function streamAssistantFromPrompt(
     prompt,
-    { echoUser = true, closeExamplesOnStart = true, straplineText } = {}
+    {
+      echoUser = true,
+      closeExamplesOnStart = true,
+      straplineText,
+      showPostActions = true // ✅ controls whether we append buttons when done
+    } = {}
   ) {
-    // ✅ Capture retrieval state BEFORE we possibly close examples
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
 
-    if (closeExamplesOnStart) examples.closeExamples({ animate: true, scroll: true });
+    if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
-    // UI: render user message (but DO NOT commit it to memory yet)
     if (echoUser) {
       // marked is global (loaded in main.js)
-      append('user', window.marked?.parse ? window.marked.parse(prompt) : String(prompt));
+      const html = window.marked?.parse ? window.marked.parse(prompt) : String(prompt);
+      append('user', html);
       resetTextareaHeight();
     }
 
@@ -236,7 +235,9 @@ export function createChatController({
         }
         contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
         assistantDiv.classList.add('ready');
-        addPostActions(assistantDiv);
+
+        // ✅ ONLY after completion (even on error)
+        if (showPostActions) addPostActions(assistantDiv);
         return;
       }
 
@@ -296,9 +297,6 @@ export function createChatController({
               err.style.cssText = 'color:red; margin-top:6px;';
               err.textContent = `[Error] ${evt.message}`;
               assistantDiv.appendChild(err);
-
-            } else if (evt.type === 'done') {
-              // no-op
             }
           } catch {
             // ignore parse errors
@@ -306,7 +304,7 @@ export function createChatController({
         }
       }
 
-      // ✅ Commit the full turn to memory (user + assistant) AFTER completion.
+      // ✅ Commit full turn AFTER completion
       if (echoUser) conversation.push({ role: 'user', content: prompt });
 
       if (assistantDiv._rawTextBuffer && assistantDiv._rawTextBuffer.trim()) {
@@ -315,7 +313,8 @@ export function createChatController({
         lastAssistantText = finalText;
       }
 
-      addPostActions(assistantDiv);
+      // ✅ Buttons appear ONLY after streaming is fully done
+      if (showPostActions) addPostActions(assistantDiv);
 
     } catch {
       showThinking(assistantDiv, false);
@@ -334,7 +333,10 @@ export function createChatController({
       err.style.cssText = 'color:red; margin-top:6px;';
       err.textContent = msg;
       assistantDiv.appendChild(err);
-      addPostActions(assistantDiv);
+
+      // ✅ Only after completion
+      if (showPostActions) addPostActions(assistantDiv);
+
     } finally {
       setButtonsStreaming(false);
       controller = null;
@@ -344,7 +346,7 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true });
+    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
   }
 
   return {

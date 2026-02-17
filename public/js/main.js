@@ -49,9 +49,8 @@ Keep it concise and friendly; no emojis. Avoid generic fluff.
 
 let SUMMARY_PROMPT = '';
 
-
-// Load introduction prompt from backend (via Vercel /api route)
-async function loadIntroPromptFromServer() {
+// Load prompts from backend (via Vercel /api route)
+async function loadProjectPromptsFromServer() {
   try {
     const res = await fetch('/api/project-settings', { credentials: 'same-origin' });
     const data = await res.json();
@@ -63,11 +62,10 @@ async function loadIntroPromptFromServer() {
     const summary = data.settings?.summary_prompt;
     if (summary && summary.trim()) SUMMARY_PROMPT = summary.trim();
   } catch (err) {
-    console.warn('Intro prompt fallback used:', err?.message || err);
+    console.warn('Project prompt fallback used:', err?.message || err);
   }
 }
-
-await loadIntroPromptFromServer();
+await loadProjectPromptsFromServer();
 
 // ──────────────────────────────────────────────────────────
 /** DOM */
@@ -129,7 +127,6 @@ const controller = createChatController({
   getUseRetrieval
 });
 
-
 // Attach example fill handlers present at load
 attachExampleFillHandlers({
   exampleCards,
@@ -145,6 +142,7 @@ if (clearBtn) {
   clearBtn.addEventListener('click', () => {
     if (chat) chat.innerHTML = '';
     controller.resetTextareaHeight();
+    controller.clearConversationMemory?.();
     examples.openExamples(); // opening examples => retrieval ON
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   });
@@ -186,14 +184,17 @@ if (examplesToggle) {
   });
 }
 
-// Auto-start assistant greeting (hardcoded, no generation)
+// ──────────────────────────────────────────────────────────
+// ✅ Auto-start assistant greeting (hardcoded, no generation)
+// Must happen AFTER controller exists.
+// Also placed AFTER maybeShowExamples so examples can open on first load.
+// ──────────────────────────────────────────────────────────
 controller.setButtonsStreaming(false);
 if (chat && chat.children.length === 0) {
   controller.renderStaticAssistantMessage(DEFAULT_WELCOME_PROMPT, {
     straplineText: STRAPLINE.autoStartText
   });
 }
-
 
 // ──────────────────────────────────────────────────────────
 /** Context Pages (About / How it works / Included Data) */
@@ -282,7 +283,6 @@ function renderIncludedDataTable(rows) {
   `;
 }
 
-
 async function loadSitePage(page) {
   const lang = (navigator.language || 'en').toLowerCase();
 
@@ -343,9 +343,8 @@ function setupExamplesCarousel() {
   const nextBtn = examplesNextBtn;
   const dotsEl  = examplesDotsEl;
 
-  // One-time state bucket
   const state = (grid._carouselState ||= {
-    index: 0,          // "virtual" page index in real pages (0..realPages-1)
+    index: 0,
     perPage: 2,
     realPages: 1,
     isJumping: false,
@@ -353,10 +352,7 @@ function setupExamplesCarousel() {
   });
 
   const getPerPage = () => (window.matchMedia('(max-width: 640px)').matches ? 1 : 2);
-
   const safeClamp = (n, a, b) => Math.max(a, Math.min(b, n));
-
-  const getAllCards = () => Array.from(grid.querySelectorAll('.example'));
   const getRealCards = () => Array.from(grid.querySelectorAll('.example:not([data-clone="1"])'));
 
   const removeClones = () => {
@@ -365,26 +361,20 @@ function setupExamplesCarousel() {
 
   const buildClones = () => {
     removeClones();
-
     const realCards = getRealCards();
     const per = state.perPage;
 
-    if (realCards.length <= per) {
-      // Not enough cards to loop meaningfully, just leave it as-is
-      return;
-    }
+    if (realCards.length <= per) return;
 
     const head = realCards.slice(0, per);
     const tail = realCards.slice(-per);
 
-    // Clone tail to the front
     tail.forEach(card => {
       const c = card.cloneNode(true);
       c.setAttribute('data-clone', '1');
       grid.insertBefore(c, grid.firstChild);
     });
 
-    // Clone head to the end
     head.forEach(card => {
       const c = card.cloneNode(true);
       c.setAttribute('data-clone', '1');
@@ -400,16 +390,11 @@ function setupExamplesCarousel() {
 
   const pageWidth = () => Math.max(1, grid.clientWidth);
 
-  // In the DOM we have: [clonesTail] [realPages...] [clonesHead]
-  // So the "real page i" is located at scrollLeft = (i + 1) * pageWidth
   const scrollToRealIndex = (realIndex, behavior = 'smooth') => {
     const x = (realIndex + 1) * pageWidth();
     state.isJumping = (behavior === 'auto');
     grid.scrollTo({ left: x, behavior });
-    // release the jump flag quickly
-    if (behavior === 'auto') {
-      requestAnimationFrame(() => { state.isJumping = false; });
-    }
+    if (behavior === 'auto') requestAnimationFrame(() => { state.isJumping = false; });
   };
 
   const buildDots = () => {
@@ -434,7 +419,6 @@ function setupExamplesCarousel() {
   };
 
   const updateButtons = () => {
-    // Infinite means never disabled
     if (prevBtn) prevBtn.disabled = false;
     if (nextBtn) nextBtn.disabled = false;
   };
@@ -445,17 +429,10 @@ function setupExamplesCarousel() {
   };
 
   const normalizeIfOnClonePage = () => {
-    // Determine which "DOM page" we're on: 0..(realPages+1)
     const w = pageWidth();
     const domPage = Math.round(grid.scrollLeft / w);
 
-    // domPage mapping:
-    // 0            => leading clone page (tail clones)
-    // 1..realPages => real pages
-    // realPages+1  => trailing clone page (head clones)
-
     if (domPage === 0) {
-      // Jump to last real page (same visual position as clones)
       state.index = state.realPages - 1;
       scrollToRealIndex(state.index, 'auto');
       updateUI();
@@ -463,14 +440,12 @@ function setupExamplesCarousel() {
     }
 
     if (domPage === state.realPages + 1) {
-      // Jump to first real page
       state.index = 0;
       scrollToRealIndex(state.index, 'auto');
       updateUI();
       return;
     }
 
-    // Otherwise set state.index from real dom page
     const realIndex = safeClamp(domPage - 1, 0, state.realPages - 1);
     if (realIndex !== state.index) {
       state.index = realIndex;
@@ -482,26 +457,22 @@ function setupExamplesCarousel() {
     state.perPage = getPerPage();
     computeRealPages();
 
-    // Rebuild clones whenever perPage changes or items change
     buildClones();
-    computeRealPages(); // recompute after cloning, just in case
+    computeRealPages();
 
     buildDots();
     updateUI();
 
-    // Start on the first real page (domPage=1)
     scrollToRealIndex(state.index, 'auto');
   };
 
   const go = (dir) => {
-    // Wrap index
     const next = (state.index + dir + state.realPages) % state.realPages;
     state.index = next;
     scrollToRealIndex(state.index, 'smooth');
     updateUI();
   };
 
-  // Bind listeners once
   if (!grid._carouselBound) {
     grid._carouselBound = true;
 
@@ -512,18 +483,14 @@ function setupExamplesCarousel() {
     grid.addEventListener('scroll', () => {
       if (state.isJumping) return;
       clearTimeout(t);
-      t = setTimeout(() => {
-        normalizeIfOnClonePage();
-      }, 80);
+      t = setTimeout(() => normalizeIfOnClonePage(), 80);
     });
 
     window.addEventListener('resize', () => recompute());
   }
 
-  // Initial setup / refresh
   recompute();
 }
-
 
 // ──────────────────────────────────────────────────────────
 /** Load example prompts (public read via backend → Supabase) */
