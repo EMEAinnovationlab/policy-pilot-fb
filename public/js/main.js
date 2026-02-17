@@ -79,7 +79,7 @@ const examplesContainer = document.getElementById('example-prompts');
 const closeExamplesBtn = document.getElementById('close-examples');
 const examplesToggle = document.getElementById('toggle-examples');
 
-// Example cards may be replaced later by loadAndRenderExamplePrompts()
+// Example cards will be created by loadAndRenderExamplePrompts()
 const exampleCards = document.querySelectorAll('.example');
 
 // Carousel controls (must exist in your HTML)
@@ -120,15 +120,13 @@ const examples = {
   closeExamples: (opts) => closeExamples(examplesContainer, examplesToggle, opts)
 };
 
-// ✅ Always start with retrieval OFF (examples panel closed) on page load
+// ──────────────────────────────────────────────────────────
+// Start with examples closed (retrieval OFF) but ensure the toggle is visible
 if (examplesContainer) {
+  // close without animation so there is no visual flicker
   examples.closeExamples({ animate: false, scroll: false });
-}
-
-// Ensure toggle visibility reflects closed state
-if (examplesToggle && examplesContainer) {
-  const open = !examplesContainer.classList.contains('hide');
-  examplesToggle.classList.toggle('hide', open);
+  // make sure the toggle is visible so the user can open examples
+  if (examplesToggle) examplesToggle.classList.remove('hide');
 }
 
 // ──────────────────────────────────────────────────────────
@@ -140,12 +138,8 @@ const controller = createChatController({
   getUseRetrieval
 });
 
-// Attach example fill handlers present at initial load (in case HTML already had examples)
-attachExampleFillHandlers({
-  exampleCards,
-  input,
-  autoGrowTextarea: controller.autoGrowTextarea,
-});
+// Don't attach early attachExampleFillHandlers here with stale nodes.
+// Handlers are attached after prompts are loaded inside loadAndRenderExamplePrompts.
 
 // Buttons / inputs
 if (sendBtn) sendBtn.addEventListener('click', controller.sendMessage);
@@ -157,7 +151,7 @@ if (clearBtn) {
     controller.resetTextareaHeight();
     controller.clearConversationMemory?.();
 
-    // Clear should NOT auto-enable retrieval; keep panel closed by default
+    // Keep examples closed by default after clearing
     examples.closeExamples({ animate: true, scroll: true });
 
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
@@ -190,13 +184,16 @@ if (examplesToggle) {
 }
 
 // ──────────────────────────────────────────────────────────
-// ✅ Auto-start assistant greeting (hardcoded, no generation)
-// Intro will show only "Nieuw data verzoek" (handled in chatFlow.js)
+// ✅ Auto-start assistant greeting (streamed for consistent UX)
+// Intro is streamed with showPostActions: 'data-only' (handled in chatFlow).
 // ──────────────────────────────────────────────────────────
 controller.setButtonsStreaming(false);
 if (chat && chat.children.length === 0) {
-  controller.renderStaticAssistantMessage(DEFAULT_WELCOME_PROMPT, {
-    straplineText: STRAPLINE.autoStartText
+  controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
+    echoUser: false,
+    closeExamplesOnStart: false, // keep retrieval OFF
+    straplineText: STRAPLINE.autoStartText,
+    showPostActions: 'data-only'
   });
 }
 
@@ -531,11 +528,15 @@ async function loadAndRenderExamplePrompts() {
     }).filter(Boolean).join('');
 
     const cards = grid.querySelectorAll('.example');
+    // Attach handlers to the freshly rendered cards
     attachExampleFillHandlers({
       exampleCards: cards,
       input,
       autoGrowTextarea: controller.autoGrowTextarea,
     });
+
+    // Ensure toggle is visible (we're closed by default)
+    if (examplesToggle) examplesToggle.classList.remove('hide');
 
     setupExamplesCarousel();
   } catch (err) {
