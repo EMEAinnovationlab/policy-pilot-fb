@@ -1177,18 +1177,17 @@ x§
 
 /* Send button: show spinner ONLY when disabled+loading AND hovered */
 #send {
-  position: relative; /* needed for ::after centering */
 }
 
 #send svg {
   transition: opacity 0.15s ease;
 }
 
-#send[data-loading="1"]:hover svg {
+#send[data-loading="1"] svg {
   opacity: 0; /* hide arrow while hovered in loading state */
 }
 
-#send[data-loading="1"]:hover::after {
+#send[data-loading="1"]::after {
   content: "";
   position: absolute;
   left: 50%;
