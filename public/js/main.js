@@ -248,19 +248,32 @@ window.addEventListener('keydown', (e) => {
 
 function renderIncludedDataTable(rows) {
   if (!rows || rows.length === 0) return '<p class="muted">No documents found.</p>';
+
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+  };
+
+  const esc = (v) => (v ?? '').toString().replace(/</g, '&lt;');
+
   const body = rows.map(r => `
     <tr>
-      <td>${(r.doc_name ?? '').toString().replace(/</g,'&lt;')}</td>
-      <td>${(r.uploaded_by ?? '').toString().replace(/</g,'&lt;')}</td>
+      <td>${esc(r.doc_name)}</td>
+      <td>${esc(r.uploaded_by)}</td>
+      <td>${esc(fmtDate(r.date_uploaded))}</td>
     </tr>
   `).join('');
+
   return `
     <table class="pp-table">
-      <thead><tr><th>Bron</th><th>Data van</th></tr></thead>
+      <thead><tr><th>Bron</th><th>Data van</th><th>Upload datum</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
   `;
 }
+
 
 async function loadSitePage(page) {
   const lang = (navigator.language || 'en').toLowerCase();

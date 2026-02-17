@@ -336,16 +336,32 @@ api.get('/site-content', async (req, res) => {
 
 api.get('/documents/list', async (_req, res) => {
   try {
-    const rows = await supabaseRest(`/documents?select=doc_name,uploaded_by&order=uploaded_by.asc,doc_name.asc`);
+    // Pull most recent first so the first time we see a doc_name we keep the latest upload date
+    const rows = await supabaseRest(
+      `/documents?select=doc_name,uploaded_by,date_uploaded&order=date_uploaded.desc,uploaded_by.asc,doc_name.asc`
+    );
+
     const seen = new Set();
     const items = [];
+
     for (const r of rows) {
       const n = (r.doc_name || '').trim();
-      if (n && !seen.has(n)) { seen.add(n); items.push({ doc_name: n, uploaded_by: r.uploaded_by || '' }); }
+      if (!n || seen.has(n)) continue;
+
+      seen.add(n);
+      items.push({
+        doc_name: n,
+        uploaded_by: r.uploaded_by || '',
+        date_uploaded: r.date_uploaded || null
+      });
     }
+
     res.json({ ok: true, items });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message, items: [] }); }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message, items: [] });
+  }
 });
+
 
 // RAW list (diagnostics)
 api.get('/documents/list-raw', async (_req, res) => {
