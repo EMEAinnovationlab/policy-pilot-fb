@@ -652,8 +652,8 @@ textarea {
 
 }
 .header-inner {
-  max-width: 800px; margin: 0 auto;
-  width: 800px;
+  max-width: 1000px; margin: 0 auto;
+  width: 1000px;
   background: var(--white);
   /* border: 1px solid rgba(0,0,0,.06); */
   padding: 10px 60px 10px 48px;
