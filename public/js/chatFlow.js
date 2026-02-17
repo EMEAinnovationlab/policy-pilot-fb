@@ -57,6 +57,41 @@ function setButtonsStreaming(isStreaming) {
     }
     hide(dom.stopBtn);
   }
+
+    // ✅ Render a hardcoded (non-generated) assistant message, but still seed memory
+  function renderStaticAssistantMessage(
+    markdownText,
+    { straplineText } = {}
+  ) {
+    const assistantDiv = append('assistant', '');
+    assistantDiv.classList.add('initializing');
+
+    const headerText =
+      straplineText ?? config.STRAPLINE.autoStartText ?? config.STRAPLINE.defaultText;
+
+    renderAssistantHeader(
+      assistantDiv,
+      headerText,
+      config.STRAPLINE.iconUrl,
+      config.STRAPLINE.defaultText
+    );
+
+    const contentEl = getOrCreateContentContainer(assistantDiv);
+
+    // Render markdown locally (no backend call)
+    // renderMarkdownAndFadeNew expects full markdown string each time
+    renderMarkdownAndFadeNew(contentEl, markdownText || '');
+
+    requestAnimationFrame(() => assistantDiv.classList.add('ready'));
+
+    // ✅ Seed client-side memory so the backend sees it as context later
+    if (markdownText && String(markdownText).trim()) {
+      conversation.push({ role: 'assistant', content: String(markdownText) });
+    }
+
+    return assistantDiv;
+  }
+
 }
 
   function showThinking(div, on = true) {
@@ -263,10 +298,12 @@ function setButtonsStreaming(isStreaming) {
   return {
     sendMessage,
     streamAssistantFromPrompt,
+    renderStaticAssistantMessage, // ✅ add this
     autoGrowTextarea,
     resetTextareaHeight,
     setButtonsStreaming,
     stopStreaming,
     clearConversationMemory
   };
+
 }

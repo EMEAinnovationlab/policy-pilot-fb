@@ -177,15 +177,14 @@ if (examplesToggle) {
   });
 }
 
-// Auto-start assistant greeting
+// Auto-start assistant greeting (hardcoded, no generation)
 controller.setButtonsStreaming(false);
 if (chat && chat.children.length === 0) {
-  controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
-    echoUser: false,
-    closeExamplesOnStart: false,
+  controller.renderStaticAssistantMessage(DEFAULT_WELCOME_PROMPT, {
     straplineText: STRAPLINE.autoStartText
   });
 }
+
 
 // ──────────────────────────────────────────────────────────
 /** Context Pages (About / How it works / Included Data) */
