@@ -220,7 +220,7 @@ main {
 .chat-wrapper {
   max-width: 1000px;
   min-width: 1000px;
-  max-height: 100vh;
+  max-height: 90vh;
   background-color: var(--white);
   box-shadow: var(--shadow-bg-drop-suttle);
   border-radius: var(--r-sm);
@@ -640,7 +640,7 @@ textarea {
 
 /* ====== Header ====== */
 .site-header {
-  position: sticky; top: 0; z-index: 50;
+  position: absolute; top: 0; z-index: 50;
   background: transparent;
   padding: 10px 16px;
 }
