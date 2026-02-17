@@ -435,7 +435,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
 
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 800px) {
 .examples-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
