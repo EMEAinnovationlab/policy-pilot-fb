@@ -205,12 +205,6 @@ if (chat && chat.children.length === 0) {
 }
 
 
-controller.streamAssistantFromPrompt(DEFAULT_WELCOME_PROMPT, {
-  echoUser: false,
-  closeExamplesOnStart: false,      // keep retrieval OFF
-  straplineText: STRAPLINE.autoStartText,
-  showPostActions: 'data-only'      // only "Nieuw data verzoek"
-});
 
 
 // ──────────────────────────────────────────────────────────
