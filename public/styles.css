@@ -220,7 +220,7 @@ main {
 .chat-wrapper {
   max-width: 1000px;
   min-width: 1000px;
-  max-height: 86vh;
+  max-height: 100vh;
   background-color: var(--white);
   box-shadow: var(--shadow-bg-drop-suttle);
   border-radius: var(--r-sm);
