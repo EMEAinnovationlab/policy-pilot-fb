@@ -68,7 +68,7 @@ body {
   min-height: 100vh;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-background-color: var(--bg); 
+background-color: var(--white-dark); 
   background-position: bottom left;
 }
 
