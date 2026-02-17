@@ -227,7 +227,7 @@ main {
   overflow-y: scroll;
   scrollbar-width: none;
   padding-bottom: 300px;
-  padding-top: 300px;
+  padding-top: 150px;
 }
 
 /* 🔸 Responsive breakpoint — below 1000px screen width */
@@ -663,7 +663,7 @@ textarea {
 
 /* Brand */
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;}
-.logo { width: 50px;}
+.logo { width: 40px!important;}
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; }
 .brand-text { display: grid; line-height: 1; }
 .brand-title {

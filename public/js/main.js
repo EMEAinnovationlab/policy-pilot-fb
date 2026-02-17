@@ -79,8 +79,8 @@ const examplesContainer = document.getElementById('example-prompts');
 const closeExamplesBtn = document.getElementById('close-examples');
 const examplesToggle = document.getElementById('toggle-examples');
 
-// Example cards may be replaced later by loadAndRenderExamplePrompts()
-const exampleCards = document.querySelectorAll('.example');
+// ✅ IMPORTANT: bind handlers to the container (event delegation)
+const examplesGrid = document.getElementById('examples-grid');
 
 // Carousel controls (must exist in your HTML)
 const examplesPrevBtn = document.getElementById('examples-prev');
@@ -140,12 +140,12 @@ const controller = createChatController({
   getUseRetrieval
 });
 
-// Attach example fill handlers present at initial load (in case HTML already had examples)
+// ✅ Attach example fill handlers ONCE to the grid container
+// This works for dynamically injected cards AND carousel clones.
 attachExampleFillHandlers({
-  exampleCards,
+  container: examplesGrid,
   input,
   autoGrowTextarea: controller.autoGrowTextarea,
-  // ✅ FIX: provide closeExamplesFn so clicks don't throw
   closeExamplesFn: (opts) => examples.closeExamples(opts),
 });
 
@@ -532,15 +532,7 @@ async function loadAndRenderExamplePrompts() {
       `;
     }).filter(Boolean).join('');
 
-    const cards = grid.querySelectorAll('.example');
-    attachExampleFillHandlers({
-      exampleCards: cards,
-      input,
-      autoGrowTextarea: controller.autoGrowTextarea,
-      // ✅ FIX: provide closeExamplesFn so dynamically loaded cards work too
-      closeExamplesFn: (opts) => examples.closeExamples(opts),
-    });
-
+    // ✅ No per-card handler binding needed (delegation already bound to examplesGrid)
     setupExamplesCarousel();
   } catch (err) {
     console.error('Could not load example prompts:', err);

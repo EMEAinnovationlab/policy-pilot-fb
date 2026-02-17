@@ -51,21 +51,32 @@ export function closeExamples(examplesContainer, examplesToggle, { animate = tru
   examplesContainer.addEventListener('transitionend', done);
 }
 
-// ✅ Now: clicking an example ONLY fills the input, does NOT close examples
-export function attachExampleFillHandlers({ exampleCards, input, autoGrowTextarea }) {
-  if (!exampleCards) return;
+/**
+ * Event delegation: works for dynamically injected cards AND carousel clones.
+ * Use by passing { container: document.getElementById('examples-grid'), ... }
+ */
+export function attachExampleFillHandlers({ container, input, closeExamplesFn, autoGrowTextarea }) {
+  if (!container) return;
 
-  exampleCards.forEach(card => {
-    card.addEventListener('click', () => {
-      const text = card.getAttribute('data-prompt') || '';
-      if (!text.trim()) return;
+  // bind once
+  if (container._exampleFillBound) return;
+  container._exampleFillBound = true;
 
-      if (input) {
-        input.value = text;
-        if (autoGrowTextarea) autoGrowTextarea();
-        input.focus();
-        input.selectionStart = input.selectionEnd = input.value.length;
-      }
-    });
+  container.addEventListener('click', (e) => {
+    const card = e.target.closest('.example');
+    if (!card || !container.contains(card)) return;
+
+    const text = card.getAttribute('data-prompt') || '';
+    if (!text.trim()) return;
+
+    if (input) {
+      input.value = text;
+      if (typeof autoGrowTextarea === 'function') autoGrowTextarea();
+      input.focus();
+      input.selectionStart = input.selectionEnd = input.value.length;
+    }
+
+    // optional, so this can’t crash clicks ever again
+    closeExamplesFn?.({ animate: true, scroll: true });
   });
 }
