@@ -645,27 +645,27 @@ textarea {
   padding: 10px 16px;
 }
 .header-inner {
-  max-width: 1000px; margin: 0 auto;
-  width: 1000px;
+  max-width: 800px; margin: 0 auto;
+  width: 800px;
   background: var(--white);
   /* border: 1px solid rgba(0,0,0,.06); */
   padding: 10px 60px 10px 48px;
-  border-radius: 10px;
+  border-radius: 100px;
   display: flex; align-items: center; justify-content: space-between;
   box-shadow: var(--shadow-bg-drop);
 }
 
 /* Brand */
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;}
-.logo { width: 60px;}
+.logo { width: 50px;}
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; }
 .brand-text { display: grid; line-height: 1; }
 .brand-title {
   font-family: var(--font-serif, "DM Serif Display", serif);
-  font-size: 26px;
+  font-size: 22px;
 }
 .brand-subtitle {
-  font-size: 9px; letter-spacing: 0.22em; color: var(--black);
+  font-size: 8px; letter-spacing: 0.22em; color: var(--black);
   font-weight: 600;
   text-transform: uppercase; margin-top: 3px;
 }
@@ -676,7 +676,7 @@ textarea {
     color: var(--black);
     font-family: var(--font-sans);
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: 600;
     line-height: 123%; /* 19.68px */
@@ -685,7 +685,7 @@ textarea {
 .nav-link:hover { opacity: .75; }
 .nav-cta {
 display: inline-flex;
-height: 42.53px;
+height: 30px;
 padding: 15px 24px;
 justify-content: center;
 align-items: center;
@@ -695,7 +695,7 @@ color: var(--black);
 border: 2px solid var(--PublicMatters-blue);
 font-family: var(--font-sans);
 font-weight: 600;
-font-size: 14px;
+font-size: 10px;
 color: var(--black);
 cursor: pointer;
 
