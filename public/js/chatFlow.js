@@ -27,31 +27,37 @@ export function createChatController({
   const show = el => el && el.classList.remove('hide');
   const hide = el => el && el.classList.add('hide');
 
-  function setButtonsStreaming(isStreaming) {
-    if (isStreaming) {
-      if (dom.sendBtn) {
-        dom.sendBtn.disabled = true;
-        dom.sendBtn.style.opacity = '0.6';
-        dom.sendBtn.style.cursor = 'not-allowed';
-      }
-      if (dom.input) {
-        dom.input.disabled = true;
-        dom.input.setAttribute('aria-busy', 'true');
-      }
-      show(dom.stopBtn);
-    } else {
-      if (dom.sendBtn) {
-        dom.sendBtn.disabled = false;
-        dom.sendBtn.style.opacity = '1';
-        dom.sendBtn.style.cursor = 'pointer';
-      }
-      if (dom.input) {
-        dom.input.disabled = false;
-        dom.input.removeAttribute('aria-busy');
-      }
-      hide(dom.stopBtn);
+function setButtonsStreaming(isStreaming) {
+  if (isStreaming) {
+    if (dom.sendBtn) {
+      dom.sendBtn.disabled = true;
+      dom.sendBtn.style.opacity = '0.6';
+      dom.sendBtn.style.cursor = 'not-allowed';
+
+      // ✅ mark as loading (used by CSS hover rule)
+      dom.sendBtn.dataset.loading = '1';
     }
+    if (dom.input) {
+      dom.input.disabled = true;
+      dom.input.setAttribute('aria-busy', 'true');
+    }
+    show(dom.stopBtn);
+  } else {
+    if (dom.sendBtn) {
+      dom.sendBtn.disabled = false;
+      dom.sendBtn.style.opacity = '1';
+      dom.sendBtn.style.cursor = 'pointer';
+
+      // ✅ remove loading marker
+      delete dom.sendBtn.dataset.loading;
+    }
+    if (dom.input) {
+      dom.input.disabled = false;
+      dom.input.removeAttribute('aria-busy');
+    }
+    hide(dom.stopBtn);
   }
+}
 
   function showThinking(div, on = true) {
     if (on && !div._spinner) {
