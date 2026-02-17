@@ -79,7 +79,7 @@ const examplesContainer = document.getElementById('example-prompts');
 const closeExamplesBtn = document.getElementById('close-examples');
 const examplesToggle = document.getElementById('toggle-examples');
 
-// ✅ IMPORTANT: bind handlers to the container (event delegation)
+// ✅ IMPORTANT: container for delegation (cards + clones)
 const examplesGrid = document.getElementById('examples-grid');
 
 // Carousel controls (must exist in your HTML)
@@ -104,14 +104,17 @@ injectStraplineStyles({
 });
 
 // ──────────────────────────────────────────────────────────
-// ✅ Retrieval rule (NO checkbox):
+// ✅ Retrieval logic (as before, but robust):
 // - If examples panel is OPEN → retrieval ON
-// - If examples panel is CLOSED → retrieval OFF
+// - If user clicked an example → retrieval ON until the next send
 // ──────────────────────────────────────────────────────────
 const isExamplesOpen = () =>
   !!examplesContainer && !examplesContainer.classList.contains('hide');
 
-const getUseRetrieval = () => isExamplesOpen();
+// This flag makes retrieval survive closing the panel after a click.
+let retrievalArmed = false;
+
+const getUseRetrieval = () => isExamplesOpen() || retrievalArmed;
 
 // ──────────────────────────────────────────────────────────
 /** Examples helpers bound with our DOM */
@@ -140,13 +143,25 @@ const controller = createChatController({
   getUseRetrieval
 });
 
-// ✅ Attach example fill handlers ONCE to the grid container
-// This works for dynamically injected cards AND carousel clones.
+// ✅ Wrap sendMessage so we can automatically disarm retrieval AFTER send starts
+const originalSendMessage = controller.sendMessage.bind(controller);
+controller.sendMessage = (...args) => {
+  // If we armed retrieval by clicking an example, we want it ON for THIS send only.
+  // Disarm immediately after invoking send so subsequent manual messages behave normally.
+  const wasArmed = retrievalArmed;
+  const result = originalSendMessage(...args);
+  if (wasArmed) retrievalArmed = false;
+  return result;
+};
+
+// ✅ Attach example fill handlers ONCE to the grid container.
+// When selecting an example: arm retrieval until the next send.
 attachExampleFillHandlers({
   container: examplesGrid,
   input,
   autoGrowTextarea: controller.autoGrowTextarea,
   closeExamplesFn: (opts) => examples.closeExamples(opts),
+  onSelect: () => { retrievalArmed = true; }
 });
 
 // Buttons / inputs
@@ -159,7 +174,8 @@ if (clearBtn) {
     controller.resetTextareaHeight();
     controller.clearConversationMemory?.();
 
-    // Clear should NOT auto-enable retrieval; keep panel closed by default
+    // Reset retrieval behavior too
+    retrievalArmed = false;
     examples.closeExamples({ animate: true, scroll: true });
 
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
@@ -180,9 +196,9 @@ if (input) {
 }
 
 if (closeExamplesBtn) {
-  closeExamplesBtn.addEventListener('click', () =>
-    examples.closeExamples({ animate: true, scroll: true })
-  );
+  closeExamplesBtn.addEventListener('click', () => {
+    examples.closeExamples({ animate: true, scroll: true });
+  });
 }
 if (examplesToggle) {
   examplesToggle.addEventListener('click', () => {
@@ -193,7 +209,6 @@ if (examplesToggle) {
 
 // ──────────────────────────────────────────────────────────
 // ✅ Auto-start assistant greeting (hardcoded, no generation)
-// Intro will show only "Nieuw data verzoek" (handled in chatFlow.js)
 // ──────────────────────────────────────────────────────────
 controller.setButtonsStreaming(false);
 if (chat && chat.children.length === 0) {
@@ -532,7 +547,6 @@ async function loadAndRenderExamplePrompts() {
       `;
     }).filter(Boolean).join('');
 
-    // ✅ No per-card handler binding needed (delegation already bound to examplesGrid)
     setupExamplesCarousel();
   } catch (err) {
     console.error('Could not load example prompts:', err);

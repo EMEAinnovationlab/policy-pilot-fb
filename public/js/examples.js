@@ -1,4 +1,5 @@
 // examples.js
+
 export function openExamples(examplesContainer, examplesToggle) {
   if (!examplesContainer) return;
   examplesContainer.style.removeProperty('max-height');
@@ -10,6 +11,7 @@ export function openExamples(examplesContainer, examplesToggle) {
 
 export function closeExamples(examplesContainer, examplesToggle, { animate = true, scroll = true } = {}) {
   if (!examplesContainer) return;
+
   const smoothScrollToBottom = () =>
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
@@ -40,10 +42,12 @@ export function closeExamples(examplesContainer, examplesToggle, { animate = tru
   const done = () => {
     examplesContainer.classList.add('hide');
     if (examplesToggle) examplesToggle.classList.remove('hide');
+
     examplesContainer.classList.remove('is-closing');
     examplesContainer.style.removeProperty('max-height');
     examplesContainer.style.removeProperty('opacity');
     examplesContainer.style.removeProperty('overflow');
+
     examplesContainer.removeEventListener('transitionend', done);
     if (scroll) smoothScrollToBottom();
   };
@@ -53,9 +57,14 @@ export function closeExamples(examplesContainer, examplesToggle, { animate = tru
 
 /**
  * Event delegation: works for dynamically injected cards AND carousel clones.
- * Use by passing { container: document.getElementById('examples-grid'), ... }
+ * Options:
+ * - container: element that wraps the .example cards (e.g. #examples-grid)
+ * - input: textarea
+ * - autoGrowTextarea: fn
+ * - closeExamplesFn: fn(opts)
+ * - onSelect: fn({ text, card })  // called before closeExamplesFn
  */
-export function attachExampleFillHandlers({ container, input, closeExamplesFn, autoGrowTextarea }) {
+export function attachExampleFillHandlers({ container, input, closeExamplesFn, autoGrowTextarea, onSelect }) {
   if (!container) return;
 
   // bind once
@@ -68,6 +77,13 @@ export function attachExampleFillHandlers({ container, input, closeExamplesFn, a
 
     const text = card.getAttribute('data-prompt') || '';
     if (!text.trim()) return;
+
+    // Hook for main.js logic (e.g. arm retrieval)
+    try {
+      onSelect?.({ text, card });
+    } catch (err) {
+      console.warn('onSelect failed:', err);
+    }
 
     if (input) {
       input.value = text;
