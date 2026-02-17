@@ -92,9 +92,9 @@ export function createChatController({
     lastAssistantText = '';
   }
 
-  // Post-actions UI: mode controls which buttons to show
+  // Post-actions UI
   // mode:
-  //   true        => show both buttons (data + summary)
+  //   true        => show both buttons
   //   "data-only" => only "Nieuw data verzoek"
   //   false       => none
   function addPostActions(assistantDiv, mode = true) {
@@ -104,7 +104,6 @@ export function createChatController({
     const actions = document.createElement('div');
     actions.className = 'pp-post-actions';
 
-    // "Nieuw data verzoek" (always shown when mode !== false)
     const btnData = document.createElement('button');
     btnData.type = 'button';
     btnData.className = 'pp-post-btn';
@@ -115,7 +114,6 @@ export function createChatController({
     });
     actions.appendChild(btnData);
 
-    // "Maak samenvatting" only when mode === true
     if (mode === true) {
       const btnSummary = document.createElement('button');
       btnSummary.type = 'button';
@@ -129,13 +127,11 @@ export function createChatController({
         const baseText = (lastAssistantText || '').trim();
         const payload = baseText ? `${summaryPrompt}\n\n---\n\n${baseText}` : summaryPrompt;
 
-        // Summary output should NOT show another summary button,
-        // but should still show "Nieuw data verzoek"
         await streamAssistantFromPrompt(payload, {
           echoUser: false,
           closeExamplesOnStart: true,
           straplineText: 'SAMENVATTING',
-          showPostActions: 'data-only'
+          showPostActions: 'data-only' // summary output only gets data button
         });
       });
 
@@ -184,7 +180,7 @@ export function createChatController({
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = 'auto' // 'auto' decides based on retrieval for THIS request
+      showPostActions = 'auto' // 'auto' decides based on retrieval for this request
     } = {}
   ) {
     // Capture retrieval state BEFORE we possibly close examples
@@ -192,7 +188,6 @@ export function createChatController({
 
     if (closeExamplesOnStart) examples?.closeExamples?.({ animate: true, scroll: true });
 
-    // UI: render user message (but DO NOT commit it to memory yet)
     if (echoUser) {
       const html = window.marked?.parse ? window.marked.parse(prompt) : String(prompt);
       append('user', html);
@@ -242,12 +237,7 @@ export function createChatController({
         contentEl.innerHTML = '<span style="color:red">Error: failed to connect.</span>';
         assistantDiv.classList.add('ready');
 
-        // Decide post-mode: auto -> depends on retrieval for this request
-        const postMode =
-          showPostActions === 'auto'
-            ? (useRetrievalForThisRequest ? true : 'data-only')
-            : showPostActions;
-
+        const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
         addPostActions(assistantDiv, postMode);
         return;
       }
@@ -304,16 +294,12 @@ export function createChatController({
                 straplineShown = true;
                 contentEl = getOrCreateContentContainer(assistantDiv);
               }
-              const errEl = document.createElement('div');
-              errEl.style.cssText = 'color:red; margin-top:6px;';
-              try {
-                errEl.textContent = String(evt.message || 'Error');
-              } catch (e) {
-                errEl.textContent = 'Error';
-              }
-              assistantDiv.appendChild(errEl);
+              const err = document.createElement('div');
+              err.style.cssText = 'color:red; margin-top:6px;';
+              err.textContent = `[Error] ${evt.message}`;
+              assistantDiv.appendChild(err);
             }
-          } catch (parseError) {
+          } catch {
             // ignore parse errors
           }
         }
@@ -328,15 +314,10 @@ export function createChatController({
         lastAssistantText = finalText;
       }
 
-      // Decide which buttons to show AFTER completion
-      const postMode =
-        showPostActions === 'auto'
-          ? (useRetrievalForThisRequest ? true : 'data-only')
-          : showPostActions;
-
+      const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
       addPostActions(assistantDiv, postMode);
 
-    } catch (error) {
+    } catch (err) {
       showThinking(assistantDiv, false);
       if (!straplineShown) {
         renderAssistantHeader(
@@ -349,16 +330,12 @@ export function createChatController({
         contentEl = getOrCreateContentContainer(assistantDiv);
       }
       const msg = controller ? '[Connection aborted]' : '[Connection error]';
-      const errEl = document.createElement('div');
-      errEl.style.cssText = 'color:red; margin-top:6px;';
-      errEl.textContent = String(error?.message || error || msg);
-      assistantDiv.appendChild(errEl);
+      const err = document.createElement('div');
+      err.style.cssText = 'color:red; margin-top:6px;';
+      err.textContent = msg;
+      assistantDiv.appendChild(err);
 
-      const postMode =
-        showPostActions === 'auto'
-          ? (useRetrievalForThisRequest ? true : 'data-only')
-          : showPostActions;
-
+      const postMode = showPostActions === 'auto' ? (useRetrievalForThisRequest ? true : 'data-only') : showPostActions;
       addPostActions(assistantDiv, postMode);
     } finally {
       setButtonsStreaming(false);
