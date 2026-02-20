@@ -97,18 +97,12 @@ export function createChatController({
   // ──────────────────────────────────────────────────────────
   // Post-actions UI (added AFTER completion only)
   // ──────────────────────────────────────────────────────────
-  function addPostActions(assistantDiv, { allowSummaryButton = true } = {}) {
+  function addPostActions(assistantDiv) {
     if (!assistantDiv) return;
     if (assistantDiv.querySelector('.pp-post-actions')) return;
 
     const actions = document.createElement('div');
     actions.className = 'pp-post-actions';
-
-    // ✅ Title above buttons
-    const title = document.createElement('h5');
-    title.className = 'pp-post-title';
-    title.textContent = 'Nieuwe actie?';
-    actions.appendChild(title);
 
     const btnData = document.createElement('button');
     btnData.type = 'button';
@@ -119,39 +113,30 @@ export function createChatController({
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     });
 
-    actions.appendChild(btnData);
+    const btnSummary = document.createElement('button');
+    btnSummary.type = 'button';
+    btnSummary.className = 'pp-post-btn';
+    btnSummary.textContent = 'Maak samenvatting';
+    btnSummary.addEventListener('click', async () => {
+      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+      if (!summaryPrompt) return;
 
-    // ✅ Only show summary when:
-    // - RAG is enabled
-    // - AND this specific message allows it (i.e., not a summary result)
-    const ragEnabled = !!(getUseRetrieval && getUseRetrieval());
-    if (ragEnabled && allowSummaryButton) {
-      const btnSummary = document.createElement('button');
-      btnSummary.type = 'button';
-      btnSummary.className = 'pp-post-btn';
-      btnSummary.textContent = 'Maak samenvatting';
-      btnSummary.addEventListener('click', async () => {
-        const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
-        if (!summaryPrompt) return;
+      const baseText = (lastAssistantText || '').trim();
+      const payload = baseText
+        ? `${summaryPrompt}\n\n---\n\n${baseText}`
+        : summaryPrompt;
 
-        const baseText = (lastAssistantText || '').trim();
-        const payload = baseText
-          ? `${summaryPrompt}\n\n---\n\n${baseText}`
-          : summaryPrompt;
-
-        // Don’t echo as user; it’s a UI action
-        // 🚫 Summary output should NOT get another summary button
-        await streamAssistantFromPrompt(payload, {
-          echoUser: false,
-          closeExamplesOnStart: true,
-          straplineText: 'SAMENVATTING',
-          showPostActions: true,
-          allowSummaryButton: false
-        });
+      // Don’t echo as user; it’s a UI action
+      await streamAssistantFromPrompt(payload, {
+        echoUser: false,
+        closeExamplesOnStart: true,
+        straplineText: 'SAMENVATTING',
+        showPostActions: true // summary result should get buttons
       });
+    });
 
-      actions.appendChild(btnSummary);
-    }
+    actions.appendChild(btnData);
+    actions.appendChild(btnSummary);
 
     // Put actions under the assistant content container if present
     const content = assistantDiv.querySelector('.content') || assistantDiv;
@@ -194,8 +179,7 @@ export function createChatController({
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true, // ✅ controls whether we append buttons when done
-      allowSummaryButton = true // ✅ controls whether "Maak samenvatting" is allowed under THIS message
+      showPostActions = true // ✅ controls whether we append buttons when done
     } = {}
   ) {
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
@@ -253,7 +237,7 @@ export function createChatController({
         assistantDiv.classList.add('ready');
 
         // ✅ ONLY after completion (even on error)
-        if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
+        if (showPostActions) addPostActions(assistantDiv);
         return;
       }
 
@@ -330,7 +314,7 @@ export function createChatController({
       }
 
       // ✅ Buttons appear ONLY after streaming is fully done
-      if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
+      if (showPostActions) addPostActions(assistantDiv);
 
     } catch {
       showThinking(assistantDiv, false);
@@ -351,7 +335,7 @@ export function createChatController({
       assistantDiv.appendChild(err);
 
       // ✅ Only after completion
-      if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
+      if (showPostActions) addPostActions(assistantDiv);
 
     } finally {
       setButtonsStreaming(false);
@@ -362,12 +346,7 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, {
-      echoUser: true,
-      closeExamplesOnStart: true,
-      showPostActions: true,
-      allowSummaryButton: true
-    });
+    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
   }
 
   return {
