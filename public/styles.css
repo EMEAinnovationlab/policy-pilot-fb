@@ -689,7 +689,7 @@ textarea {
     line-height: 123%; /* 19.68px */
     letter-spacing: -0.352px;
 }
-.nav-link:hover { opacity: .75; }
+.nav-link:hover { color: var(--Edelman-blue); }
 .nav-cta {
 display: inline-flex;
 height: 30px;
