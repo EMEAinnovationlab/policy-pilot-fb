@@ -1171,7 +1171,7 @@ cursor: pointer;
   gap: 8px;
   align-items: center;
   justify-content: center;
-  min-width: 110px;
+  min-width: 90px;
 }
 
 .examples-dot {
