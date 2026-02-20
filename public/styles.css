@@ -1125,7 +1125,7 @@ cursor: pointer;
 
 .examples-grid {
   display: flex;
-  gap: 18px;
+  gap: 12px;
   overflow: hidden;
   scroll-behavior: smooth;
   padding-bottom: 8px;
