@@ -97,22 +97,33 @@ export function createChatController({
   // ──────────────────────────────────────────────────────────
   // Post-actions UI (added AFTER completion only)
   // ──────────────────────────────────────────────────────────
-  function addPostActions(assistantDiv) {
-    if (!assistantDiv) return;
-    if (assistantDiv.querySelector('.pp-post-actions')) return;
+function addPostActions(assistantDiv) {
+  if (!assistantDiv) return;
+  if (assistantDiv.querySelector('.pp-post-actions')) return;
 
-    const actions = document.createElement('div');
-    actions.className = 'pp-post-actions';
+  const actions = document.createElement('div');
+  actions.className = 'pp-post-actions';
 
-    const btnData = document.createElement('button');
-    btnData.type = 'button';
-    btnData.className = 'pp-post-btn';
-    btnData.textContent = 'Nieuw data verzoek';
-    btnData.addEventListener('click', () => {
-      examples?.openExamples?.();
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-    });
+  // ✅ Title above buttons
+  const title = document.createElement('h5');
+  title.className = 'pp-post-title';
+  title.textContent = 'Nieuwe actie?';
+  actions.appendChild(title);
 
+  const btnData = document.createElement('button');
+  btnData.type = 'button';
+  btnData.className = 'pp-post-btn';
+  btnData.textContent = 'Nieuw data verzoek';
+  btnData.addEventListener('click', () => {
+    examples?.openExamples?.();
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  });
+
+  actions.appendChild(btnData);
+
+  // Only show summary button when RAG is enabled
+  const ragEnabled = !!(getUseRetrieval && getUseRetrieval());
+  if (ragEnabled) {
     const btnSummary = document.createElement('button');
     btnSummary.type = 'button';
     btnSummary.className = 'pp-post-btn';
@@ -126,23 +137,20 @@ export function createChatController({
         ? `${summaryPrompt}\n\n---\n\n${baseText}`
         : summaryPrompt;
 
-      // Don’t echo as user; it’s a UI action
       await streamAssistantFromPrompt(payload, {
         echoUser: false,
         closeExamplesOnStart: true,
         straplineText: 'SAMENVATTING',
-        showPostActions: true // summary result should get buttons
+        showPostActions: true
       });
     });
 
-    actions.appendChild(btnData);
     actions.appendChild(btnSummary);
-
-    // Put actions under the assistant content container if present
-    const content = assistantDiv.querySelector('.content') || assistantDiv;
-    content.appendChild(actions);
   }
 
+  const content = assistantDiv.querySelector('.content') || assistantDiv;
+  content.appendChild(actions);
+}
   // ✅ Hardcoded intro message (NO post-actions by design)
   function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
     const assistantDiv = append('assistant', '');
