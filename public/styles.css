@@ -420,6 +420,8 @@ button:hover { box-shadow: var(--shadow-subtle); }
   border-radius: var(--r-lg);
   min-height: 500px;
   top: 100px;
+    transition: max-height 0.35s ease, opacity 0.25s ease, transform 0.22s cubic-bezier(.2,.8,.2,1);
+  will-change: max-height, opacity, transform;
 }
 .example-header {
   display: flex;
@@ -1189,6 +1191,8 @@ cursor: pointer;
 @media (max-width: 640px) {
   .example { flex-basis: 100%; }
 }
+
+
 
 
 .request_button {

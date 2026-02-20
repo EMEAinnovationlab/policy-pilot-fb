@@ -1,12 +1,60 @@
 // examples.js
 
-export function openExamples(examplesContainer, examplesToggle) {
+export function openExamples(examplesContainer, examplesToggle, { animate = true } = {}) {
   if (!examplesContainer) return;
-  examplesContainer.style.removeProperty('max-height');
-  examplesContainer.style.removeProperty('opacity');
-  examplesContainer.style.removeProperty('overflow');
+
+  // If already open, just ensure toggle is hidden
+  if (!examplesContainer.classList.contains('hide')) {
+    if (examplesToggle) examplesToggle.classList.add('hide');
+    return;
+  }
+
+  // Show element (so we can measure height)
   examplesContainer.classList.remove('hide');
   if (examplesToggle) examplesToggle.classList.add('hide');
+
+  // No animation path
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  if (!animate || reduce) {
+    examplesContainer.style.removeProperty('max-height');
+    examplesContainer.style.removeProperty('opacity');
+    examplesContainer.style.removeProperty('overflow');
+    examplesContainer.style.removeProperty('transform');
+    return;
+  }
+
+  // Start collapsed (pop-in)
+  examplesContainer.style.overflow = 'hidden';
+  examplesContainer.style.maxHeight = '0px';
+  examplesContainer.style.opacity = '0';
+  examplesContainer.style.transform = 'translateY(10px) scale(0.98)';
+
+  // Force reflow so transitions trigger reliably
+  // eslint-disable-next-line no-unused-expressions
+  examplesContainer.offsetHeight;
+
+  // Animate to expanded
+  requestAnimationFrame(() => {
+    const target = examplesContainer.scrollHeight + 'px';
+    examplesContainer.style.maxHeight = target;
+    examplesContainer.style.opacity = '1';
+    examplesContainer.style.transform = 'translateY(0) scale(1)';
+  });
+
+  const done = (e) => {
+    // only react to the container's own transition end
+    if (e.target !== examplesContainer) return;
+
+    // Clean up so it can grow/shrink naturally while open
+    examplesContainer.style.removeProperty('max-height');
+    examplesContainer.style.removeProperty('opacity');
+    examplesContainer.style.removeProperty('overflow');
+    examplesContainer.style.removeProperty('transform');
+
+    examplesContainer.removeEventListener('transitionend', done);
+  };
+
+  examplesContainer.addEventListener('transitionend', done);
 }
 
 export function closeExamples(examplesContainer, examplesToggle, { animate = true, scroll = true } = {}) {
