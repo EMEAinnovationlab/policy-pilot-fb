@@ -1133,8 +1133,8 @@ cursor: pointer;
 
 .example {
   flex: 0 0 calc((100% - 32px) / 2); /* 2 visible */
-  padding-left: 8px;
-  padding-right: 8px;
+  margin-left: 8px;
+  margin-right: 8px;
 }
 
 /* nav row under cards */
