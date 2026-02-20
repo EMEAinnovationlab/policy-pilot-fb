@@ -1132,7 +1132,7 @@ cursor: pointer;
 }
 
 .example {
-  flex: 0 0 calc((100% - 18px) / 2); /* 2 visible */
+  flex: 0 0 calc((100% - 16px) / 2); /* 2 visible */
 }
 
 /* nav row under cards */
