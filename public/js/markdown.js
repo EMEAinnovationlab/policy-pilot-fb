@@ -1,15 +1,55 @@
 // markdown.js
 // expects global 'marked' already loaded (as in your current setup)
 
+const CHUNK_WORDS = 3;     // ✅ fade in per 3 words (tweak 2–5)
+const CHUNK_STEP_MS = 55;  // ✅ delay between chunks
+const CHUNK_FADE_MS = 420; // ✅ duration of each chunk fade
+
 export function injectMarkdownStyles() {
   if (document.getElementById('assistant-styles-markdown')) return;
+
   const style = document.createElement('style');
   style.id = 'assistant-styles-markdown';
   style.textContent = `
-    .msg.assistant .content span.w { opacity: 0; animation: wordFadeIn 220ms ease forwards; will-change: opacity; }
-    @keyframes wordFadeIn { to { opacity: 1; } }
-    .msg.assistant.initializing { opacity: 0.85; transition: opacity 160ms ease; }
+    /* Make content able to host a shine overlay */
+    .msg.assistant .content { position: relative; }
+
+    /* Chunk fade-in */
+    .msg.assistant .content span.wc {
+      opacity: 0;
+      filter: blur(2px);
+      transform: translateY(1px);
+      animation: chunkIn ${CHUNK_FADE_MS}ms cubic-bezier(.2,.9,.2,1) forwards;
+      will-change: opacity, filter, transform;
+    }
+    @keyframes chunkIn {
+      to { opacity: 1; filter: blur(0); transform: translateY(0); }
+    }
+
+    /* Slightly soften initializing to ready */
+    .msg.assistant.initializing { opacity: 0.88; transition: opacity 220ms ease; }
     .msg.assistant.initializing.ready { opacity: 1; }
+
+    /* Shine effect when ready */
+    .msg.assistant.pp-shine .content::after {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      pointer-events: none;
+      background: linear-gradient(115deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,.18) 35%,
+        rgba(255,255,255,.45) 50%,
+        rgba(255,255,255,.18) 65%,
+        rgba(255,255,255,0) 100%
+      );
+      transform: translateX(-120%);
+      animation: ppShine 700ms ease forwards;
+      mix-blend-mode: screen;
+    }
+    @keyframes ppShine {
+      to { transform: translateX(120%); }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -38,45 +78,67 @@ function collectTextNodes(root, out = []) {
   return out;
 }
 
-function wrapNewPortionWithFades(root, prevCharCount, delayStartMs = 0, stepMs = 22) {
+/**
+ * Wrap only the newly added portion (after prevCharCount) in fade-in spans.
+ * Uses chunking so it fades in per few words instead of per word.
+ */
+function wrapNewPortionWithChunkFades(root, prevCharCount, delayStartMs = 0) {
   const nodes = collectTextNodes(root);
   let seen = 0;
-  let applied = 0;
+  let chunkIndex = 0;
+
   for (const node of nodes) {
     const text = node.nodeValue || '';
     const len = text.length;
+
     if (seen + len <= prevCharCount) { seen += len; continue; }
+
     const startInNode = Math.max(0, prevCharCount - seen);
     const before = text.slice(0, startInNode);
     const after = text.slice(startInNode);
+
     const frag = document.createDocumentFragment();
     if (before) frag.appendChild(document.createTextNode(before));
-    const parts = after.split(/(\s+)/);
-    for (const part of parts) {
-      if (!part) continue;
-      if (/^\s+$/.test(part)) {
-        frag.appendChild(document.createTextNode(part));
-      } else {
-        const span = document.createElement('span');
-        span.className = 'w';
-        span.style.animationDelay = `${delayStartMs + applied * stepMs}ms`;
-        span.textContent = part;
-        frag.appendChild(span);
-        applied++;
-      }
+
+    // Match "word + trailing whitespace" so we preserve spacing exactly
+    const tokens = after.match(/\S+\s*/g) || [];
+    let buf = '';
+    let wordsInBuf = 0;
+
+    const flush = () => {
+      if (!buf) return;
+      const span = document.createElement('span');
+      span.className = 'wc';
+      span.style.animationDelay = `${delayStartMs + chunkIndex * CHUNK_STEP_MS}ms`;
+      span.textContent = buf;
+      frag.appendChild(span);
+      buf = '';
+      wordsInBuf = 0;
+      chunkIndex++;
+    };
+
+    for (const t of tokens) {
+      buf += t;
+      wordsInBuf++;
+      if (wordsInBuf >= CHUNK_WORDS) flush();
     }
+    flush();
+
     node.replaceWith(frag);
     seen += len;
   }
-  return applied;
 }
 
 export function renderMarkdownAndFadeNew(contentEl, rawText) {
   const prevCharCount = contentEl._charCount || 0;
+
   const html = marked.parse(rawText || '');
   contentEl.innerHTML = html;
+
   const totalChars = (contentEl.textContent || '').length;
   const added = Math.max(0, totalChars - prevCharCount);
-  if (added > 0) wrapNewPortionWithFades(contentEl, prevCharCount, 0, 22);
+
+  if (added > 0) wrapNewPortionWithChunkFades(contentEl, prevCharCount, 0);
+
   contentEl._charCount = totalChars;
 }
