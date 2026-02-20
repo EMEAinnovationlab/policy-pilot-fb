@@ -1124,10 +1124,9 @@ cursor: pointer;
 .examples-carousel { }
 
 .examples-grid {
-  /* was: display:grid; ... */
   display: flex;
   gap: 18px;
-  /* overflow: hidden; */
+  overflow: hidden;
   scroll-behavior: smooth;
   padding-bottom: 8px;
 }
