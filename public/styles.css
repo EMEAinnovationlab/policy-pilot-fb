@@ -1150,7 +1150,7 @@ cursor: pointer;
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  border: 1px solid rgba(150, 106, 33, 0.25);
+  /* border: 1px solid rgba(150, 106, 33, 0.25); */
   background: rgba(255, 255, 255, 0.75);
   color: var(--medium-dark-brown);
   display: inline-flex;
