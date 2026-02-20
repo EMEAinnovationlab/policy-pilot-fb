@@ -97,7 +97,7 @@ export function createChatController({
   // ──────────────────────────────────────────────────────────
   // Post-actions UI (added AFTER completion only)
   // ──────────────────────────────────────────────────────────
-  function addPostActions(assistantDiv) {
+  function addPostActions(assistantDiv, { showSummary = false } = {}) {
     if (!assistantDiv) return;
     if (assistantDiv.querySelector('.pp-post-actions')) return;
 
@@ -113,30 +113,36 @@ export function createChatController({
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     });
 
-    const btnSummary = document.createElement('button');
-    btnSummary.type = 'button';
-    btnSummary.className = 'pp-post-btn';
-    btnSummary.textContent = 'Maak samenvatting';
-    btnSummary.addEventListener('click', async () => {
-      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
-      if (!summaryPrompt) return;
-
-      const baseText = (lastAssistantText || '').trim();
-      const payload = baseText
-        ? `${summaryPrompt}\n\n---\n\n${baseText}`
-        : summaryPrompt;
-
-      // Don’t echo as user; it’s a UI action
-      await streamAssistantFromPrompt(payload, {
-        echoUser: false,
-        closeExamplesOnStart: true,
-        straplineText: 'SAMENVATTING',
-        showPostActions: true // summary result should get buttons
-      });
-    });
-
     actions.appendChild(btnData);
-    actions.appendChild(btnSummary);
+
+    // ✅ Only show summary when the preceding output was RAG (and not itself a summary run)
+    if (showSummary) {
+      const btnSummary = document.createElement('button');
+      btnSummary.type = 'button';
+      btnSummary.className = 'pp-post-btn';
+      btnSummary.textContent = 'Maak samenvatting';
+      btnSummary.addEventListener('click', async () => {
+        const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+        if (!summaryPrompt) return;
+
+        const baseText = (lastAssistantText || '').trim();
+        const payload = baseText
+          ? `${summaryPrompt}\n\n---\n\n${baseText}`
+          : summaryPrompt;
+
+        // Don’t echo as user; it’s a UI action
+        await streamAssistantFromPrompt(payload, {
+          echoUser: false,
+          closeExamplesOnStart: true,
+          straplineText: 'SAMENVATTING',
+          showPostActions: true,
+          // ✅ IMPORTANT: a summary result should NOT show the summary button again
+          forceHideSummaryButton: true
+        });
+      });
+
+      actions.appendChild(btnSummary);
+    }
 
     // Put actions under the assistant content container if present
     const content = assistantDiv.querySelector('.content') || assistantDiv;
@@ -179,7 +185,9 @@ export function createChatController({
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true // ✅ controls whether we append buttons when done
+      showPostActions = true,
+      // ✅ new: allow callers (summary button) to explicitly suppress summary button
+      forceHideSummaryButton = false
     } = {}
   ) {
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
@@ -209,6 +217,11 @@ export function createChatController({
 
     assistantDiv._rawTextBuffer = '';
 
+    // ✅ Determine whether THIS result should have the summary button
+    const isSummaryRun = String(headerText || '').trim().toUpperCase() === 'SAMENVATTING';
+    const shouldShowSummaryButton =
+      !!useRetrievalForThisRequest && !isSummaryRun && !forceHideSummaryButton;
+
     try {
       const resp = await fetch('/chat', {
         method: 'POST',
@@ -237,7 +250,7 @@ export function createChatController({
         assistantDiv.classList.add('ready');
 
         // ✅ ONLY after completion (even on error)
-        if (showPostActions) addPostActions(assistantDiv);
+        if (showPostActions) addPostActions(assistantDiv, { showSummary: shouldShowSummaryButton });
         return;
       }
 
@@ -298,6 +311,7 @@ export function createChatController({
               err.textContent = `[Error] ${evt.message}`;
               assistantDiv.appendChild(err);
             }
+            // Note: evt.type === 'sources' exists on backend; we don't need it for this rule.
           } catch {
             // ignore parse errors
           }
@@ -314,7 +328,7 @@ export function createChatController({
       }
 
       // ✅ Buttons appear ONLY after streaming is fully done
-      if (showPostActions) addPostActions(assistantDiv);
+      if (showPostActions) addPostActions(assistantDiv, { showSummary: shouldShowSummaryButton });
 
     } catch {
       showThinking(assistantDiv, false);
@@ -335,7 +349,7 @@ export function createChatController({
       assistantDiv.appendChild(err);
 
       // ✅ Only after completion
-      if (showPostActions) addPostActions(assistantDiv);
+      if (showPostActions) addPostActions(assistantDiv, { showSummary: shouldShowSummaryButton });
 
     } finally {
       setButtonsStreaming(false);
@@ -346,7 +360,11 @@ export function createChatController({
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
+    await streamAssistantFromPrompt(text, {
+      echoUser: true,
+      closeExamplesOnStart: true,
+      showPostActions: true
+    });
   }
 
   return {
