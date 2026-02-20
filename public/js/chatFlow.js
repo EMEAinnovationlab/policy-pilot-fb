@@ -97,60 +97,67 @@ export function createChatController({
   // ──────────────────────────────────────────────────────────
   // Post-actions UI (added AFTER completion only)
   // ──────────────────────────────────────────────────────────
-function addPostActions(assistantDiv) {
-  if (!assistantDiv) return;
-  if (assistantDiv.querySelector('.pp-post-actions')) return;
+  function addPostActions(assistantDiv, { allowSummaryButton = true } = {}) {
+    if (!assistantDiv) return;
+    if (assistantDiv.querySelector('.pp-post-actions')) return;
 
-  const actions = document.createElement('div');
-  actions.className = 'pp-post-actions';
+    const actions = document.createElement('div');
+    actions.className = 'pp-post-actions';
 
-  // ✅ Title above buttons
-  const title = document.createElement('h5');
-  title.className = 'pp-post-title';
-  title.textContent = 'Nieuwe actie?';
-  actions.appendChild(title);
+    // ✅ Title above buttons
+    const title = document.createElement('h5');
+    title.className = 'pp-post-title';
+    title.textContent = 'Nieuwe actie?';
+    actions.appendChild(title);
 
-  const btnData = document.createElement('button');
-  btnData.type = 'button';
-  btnData.className = 'pp-post-btn';
-  btnData.textContent = 'Nieuw data verzoek';
-  btnData.addEventListener('click', () => {
-    examples?.openExamples?.();
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-  });
-
-  actions.appendChild(btnData);
-
-  // Only show summary button when RAG is enabled
-  const ragEnabled = !!(getUseRetrieval && getUseRetrieval());
-  if (ragEnabled) {
-    const btnSummary = document.createElement('button');
-    btnSummary.type = 'button';
-    btnSummary.className = 'pp-post-btn';
-    btnSummary.textContent = 'Maak samenvatting';
-    btnSummary.addEventListener('click', async () => {
-      const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
-      if (!summaryPrompt) return;
-
-      const baseText = (lastAssistantText || '').trim();
-      const payload = baseText
-        ? `${summaryPrompt}\n\n---\n\n${baseText}`
-        : summaryPrompt;
-
-      await streamAssistantFromPrompt(payload, {
-        echoUser: false,
-        closeExamplesOnStart: true,
-        straplineText: 'SAMENVATTING',
-        showPostActions: true
-      });
+    const btnData = document.createElement('button');
+    btnData.type = 'button';
+    btnData.className = 'pp-post-btn';
+    btnData.textContent = 'Nieuw data verzoek';
+    btnData.addEventListener('click', () => {
+      examples?.openExamples?.();
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     });
 
-    actions.appendChild(btnSummary);
+    actions.appendChild(btnData);
+
+    // ✅ Only show summary when:
+    // - RAG is enabled
+    // - AND this specific message allows it (i.e., not a summary result)
+    const ragEnabled = !!(getUseRetrieval && getUseRetrieval());
+    if (ragEnabled && allowSummaryButton) {
+      const btnSummary = document.createElement('button');
+      btnSummary.type = 'button';
+      btnSummary.className = 'pp-post-btn';
+      btnSummary.textContent = 'Maak samenvatting';
+      btnSummary.addEventListener('click', async () => {
+        const summaryPrompt = (config?.SUMMARY_PROMPT || '').trim();
+        if (!summaryPrompt) return;
+
+        const baseText = (lastAssistantText || '').trim();
+        const payload = baseText
+          ? `${summaryPrompt}\n\n---\n\n${baseText}`
+          : summaryPrompt;
+
+        // Don’t echo as user; it’s a UI action
+        // 🚫 Summary output should NOT get another summary button
+        await streamAssistantFromPrompt(payload, {
+          echoUser: false,
+          closeExamplesOnStart: true,
+          straplineText: 'SAMENVATTING',
+          showPostActions: true,
+          allowSummaryButton: false
+        });
+      });
+
+      actions.appendChild(btnSummary);
+    }
+
+    // Put actions under the assistant content container if present
+    const content = assistantDiv.querySelector('.content') || assistantDiv;
+    content.appendChild(actions);
   }
 
-  const content = assistantDiv.querySelector('.content') || assistantDiv;
-  content.appendChild(actions);
-}
   // ✅ Hardcoded intro message (NO post-actions by design)
   function renderStaticAssistantMessage(markdownText, { straplineText } = {}) {
     const assistantDiv = append('assistant', '');
@@ -187,7 +194,8 @@ function addPostActions(assistantDiv) {
       echoUser = true,
       closeExamplesOnStart = true,
       straplineText,
-      showPostActions = true // ✅ controls whether we append buttons when done
+      showPostActions = true, // ✅ controls whether we append buttons when done
+      allowSummaryButton = true // ✅ controls whether "Maak samenvatting" is allowed under THIS message
     } = {}
   ) {
     const useRetrievalForThisRequest = !!(getUseRetrieval && getUseRetrieval());
@@ -245,7 +253,7 @@ function addPostActions(assistantDiv) {
         assistantDiv.classList.add('ready');
 
         // ✅ ONLY after completion (even on error)
-        if (showPostActions) addPostActions(assistantDiv);
+        if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
         return;
       }
 
@@ -322,7 +330,7 @@ function addPostActions(assistantDiv) {
       }
 
       // ✅ Buttons appear ONLY after streaming is fully done
-      if (showPostActions) addPostActions(assistantDiv);
+      if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
 
     } catch {
       showThinking(assistantDiv, false);
@@ -343,7 +351,7 @@ function addPostActions(assistantDiv) {
       assistantDiv.appendChild(err);
 
       // ✅ Only after completion
-      if (showPostActions) addPostActions(assistantDiv);
+      if (showPostActions) addPostActions(assistantDiv, { allowSummaryButton });
 
     } finally {
       setButtonsStreaming(false);
@@ -354,7 +362,12 @@ function addPostActions(assistantDiv) {
   async function sendMessage() {
     const text = (dom.input?.value || '').trim();
     if (!text || controller) return;
-    await streamAssistantFromPrompt(text, { echoUser: true, closeExamplesOnStart: true, showPostActions: true });
+    await streamAssistantFromPrompt(text, {
+      echoUser: true,
+      closeExamplesOnStart: true,
+      showPostActions: true,
+      allowSummaryButton: true
+    });
   }
 
   return {
