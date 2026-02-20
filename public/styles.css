@@ -1135,6 +1135,7 @@ cursor: pointer;
   flex: 0 0 calc((100% - 32px) / 2); /* 2 visible */
   margin-left: 8px;
   margin-right: 8px;
+  font-size: 14px;
 }
 
 /* nav row under cards */
