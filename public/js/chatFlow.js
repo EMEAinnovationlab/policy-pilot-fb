@@ -250,7 +250,11 @@ export function createChatController({
         assistantDiv.classList.add('ready');
 
         // ✅ ONLY after completion (even on error)
-        if (showPostActions) addPostActions(assistantDiv, { showSummary: shouldShowSummaryButton });
+        // ✅ Shine once when an assistant message is fully done
+assistantDiv.classList.add('pp-shine');
+setTimeout(() => assistantDiv.classList.remove('pp-shine'), 850);
+
+if (showPostActions) addPostActions(assistantDiv, { showSummary: shouldShowSummaryButton });
         return;
       }
 
