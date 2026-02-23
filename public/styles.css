@@ -680,7 +680,7 @@ textarea {
 }
 
 /* Nav */
-.main-nav { display: flex; align-items: center; gap: 30px; }
+.main-nav { display: flex; align-items: center; gap: 30px; z-index: 10000;}
 .nav-link {
     color: var(--black);
     font-family: var(--font-sans);
