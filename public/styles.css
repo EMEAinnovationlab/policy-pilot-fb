@@ -756,7 +756,7 @@ cursor: pointer;
   .main-nav .nav-cta { display: none; }
   .main-nav .nav-toggle { display: inline-block;}
 
-  .header-inner { width: 90vw;}
+  .header-inner { width: 90vw; z-index: 1000000;}
 }
 
 
