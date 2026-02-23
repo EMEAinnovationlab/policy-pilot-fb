@@ -646,7 +646,7 @@ textarea {
 
 /* ====== Header ====== */
 .site-header {
-  position: absolute; top: 0; z-index: 50;
+  position: absolute; top: 0; z-index: 100000000;
   background: transparent;
   padding: 10px 16px;
   width: 100vw;
