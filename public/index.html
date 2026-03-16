@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Policy Pilot — Analysis Tool</title>
 
+  <!-- Markdown renderer -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Main stylesheet -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -26,12 +29,19 @@
         <button id="new-analysis-nav" class="nav-cta" type="button">Begin opnieuw</button>
         <a id="logout" class="nav-link">Log out</a>
 
-        <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">
+        <button
+          class="nav-toggle"
+          aria-label="Open menu"
+          aria-expanded="false"
+          aria-controls="nav-drawer"
+          type="button"
+        >
           ☰
         </button>
       </nav>
     </div>
 
+    <!-- Mobile drawer -->
     <div id="nav-drawer" class="nav-drawer hide" role="dialog" aria-modal="false" aria-label="Menu">
       <a href="#about" class="drawer-link">Over Policy Pilot</a>
       <a href="#how" class="drawer-link">Hoe werkt het?</a>
@@ -76,7 +86,12 @@
         <div class="analysis-modal__inner">
           <div class="analysis-modal__tag">nieuwe analyse</div>
 
-          <button id="close-analysis-modal" class="analysis-modal__close" type="button" aria-label="Sluit analyse invoer">
+          <button
+            id="close-analysis-modal"
+            class="analysis-modal__close"
+            type="button"
+            aria-label="Sluit analyse invoer"
+          >
             ×
           </button>
 
@@ -96,7 +111,12 @@
               aria-label="Analysevraag"
             ></textarea>
 
-            <button id="analysis-send" class="analysis-composer__send" type="button" aria-label="Start analyse">
+            <button
+              id="analysis-send"
+              class="analysis-composer__send"
+              type="button"
+              aria-label="Start analyse"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
                 <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
               </svg>
@@ -127,22 +147,27 @@
           </article>
 
           <div class="analysis-report__actions">
-            <button id="summary-btn" class="pp-post-btn hide" type="button">Maak een samenvatting</button>
+            <button id="summary-btn" class="pp-post-btn hide" type="button">Maak samenvatting</button>
           </div>
 
           <!-- Follow-up scoped chat -->
           <section id="chat-modal" class="chat-modal hide" aria-labelledby="chat-modal-title">
             <div class="chat-modal__tag">stel een vraag</div>
 
-            <button id="close-chat-modal" class="chat-modal__close" type="button" aria-label="Sluit chat invoer">
+            <button
+              id="close-chat-modal"
+              class="chat-modal__close"
+              type="button"
+              aria-label="Sluit chat invoer"
+            >
               ×
             </button>
 
             <h3 id="chat-modal-title" class="chat-modal__title">Ga in gesprek met het rapport.</h3>
-            <p class="chat-modal__text">Stel vragen over het rapport, of laat hem samenvatten.</p>
+            <p class="chat-modal__text">Stel vragen over het rapport, of laat het samenvatten.</p>
 
             <div id="analysis-followup-thread" class="analysis-followup-thread">
-              <!-- follow-up user/assistant messages appear here -->
+              <!-- Follow-up user / assistant messages appear here -->
             </div>
 
             <div class="chat-composer">
@@ -153,7 +178,12 @@
                 aria-label="Vervolgvraag"
               ></textarea>
 
-              <button id="chat-send" class="chat-composer__send" type="button" aria-label="Verstuur vervolgvraag">
+              <button
+                id="chat-send"
+                class="chat-composer__send"
+                type="button"
+                aria-label="Verstuur vervolgvraag"
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
                   <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
                 </svg>
@@ -169,7 +199,7 @@
 
       <!-- New analysis CTA after loaded analysis -->
       <section id="new-analysis-section" class="new-analysis-section hide">
-        <h2>Nieuwe Analyse?</h2>
+        <h2>Nieuwe analyse?</h2>
         <p>Laat Policy Pilot opnieuw een analyse doen.</p>
         <button id="start-new-analysis-bottom" class="btn btn-primary-rev" type="button">
           Doe een analyse
@@ -179,43 +209,77 @@
   </main>
 
   <!-- Analysis examples modal -->
-  <div id="analysis-examples-modal" class="examples-modal hide" role="dialog" aria-modal="true" aria-labelledby="analysis-examples-title">
+  <div
+    id="analysis-examples-modal"
+    class="examples-modal hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="analysis-examples-title"
+  >
     <div class="examples-modal__backdrop" data-close-analysis-examples></div>
     <div class="examples-modal__card">
       <div class="examples-modal__tag">nieuwe analyse</div>
-      <button id="close-analysis-examples" class="examples-modal__close" type="button" aria-label="Sluit voorbeeldvragen">
+
+      <button
+        id="close-analysis-examples"
+        class="examples-modal__close"
+        type="button"
+        aria-label="Sluit voorbeeldvragen"
+      >
         ×
       </button>
 
       <h2 id="analysis-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
-      <p class="examples-modal__text">Hier komen voorbeeldvragen voor het starten van een analyse.</p>
+      <p class="examples-modal__text">
+        Hier komen voorbeeldvragen voor het starten van een analyse.
+      </p>
 
       <div id="analysis-examples-list" class="examples-modal__list">
-        <!-- analysis example cards injected here -->
+        <!-- Analysis example cards injected here -->
       </div>
     </div>
   </div>
 
   <!-- Chat examples modal -->
-  <div id="chat-examples-modal" class="examples-modal hide" role="dialog" aria-modal="true" aria-labelledby="chat-examples-title">
+  <div
+    id="chat-examples-modal"
+    class="examples-modal hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="chat-examples-title"
+  >
     <div class="examples-modal__backdrop" data-close-chat-examples></div>
     <div class="examples-modal__card">
       <div class="examples-modal__tag examples-modal__tag--red">stel een vraag</div>
-      <button id="close-chat-examples" class="examples-modal__close" type="button" aria-label="Sluit voorbeeldvragen">
+
+      <button
+        id="close-chat-examples"
+        class="examples-modal__close"
+        type="button"
+        aria-label="Sluit voorbeeldvragen"
+      >
         ×
       </button>
 
       <h2 id="chat-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
-      <p class="examples-modal__text">Hier komen voorbeeldvragen voor vervolgvragen binnen het rapport.</p>
+      <p class="examples-modal__text">
+        Hier komen voorbeeldvragen voor vervolgvragen binnen het rapport.
+      </p>
 
       <div id="chat-examples-list" class="examples-modal__list">
-        <!-- chat example cards injected here -->
+        <!-- Chat example cards injected here -->
       </div>
     </div>
   </div>
 
   <!-- Confirm reset modal -->
-  <div id="confirm-modal" class="modal-overlay hide" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div
+    id="confirm-modal"
+    class="modal-overlay hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirm-title"
+  >
     <div class="modal-card" role="document">
       <h2 id="confirm-title">Weet je het zeker? Je huidige analyse wordt niet opgeslagen.</h2>
       <p class="modal-body">
@@ -236,9 +300,15 @@
 
       <div class="pp-modal__hero">
         <div class="pp-modal__nav" role="tablist" aria-label="Context pages">
-          <button class="pp-navbtn is-active" role="tab" aria-selected="true" data-page="about">Over Policy Pilot</button>
-          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="how">Hoe werkt het?</button>
-          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="data">Data</button>
+          <button class="pp-navbtn is-active" role="tab" aria-selected="true" data-page="about">
+            Over Policy Pilot
+          </button>
+          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="how">
+            Hoe werkt het?
+          </button>
+          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="data">
+            Data
+          </button>
         </div>
       </div>
 
@@ -249,6 +319,7 @@
     </div>
   </div>
 
+  <!-- Main JS -->
   <script type="module" src="/js/main.js"></script>
   <script type="module" src="/js/modal.js"></script>
   <script type="module" src="/js/logout.js"></script>
