@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Policy Pilot — Analysis Tool</title>
 
-  <!-- Markdown renderer -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-  <!-- Main stylesheet -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -41,7 +38,6 @@
       </nav>
     </div>
 
-    <!-- Mobile drawer -->
     <div id="nav-drawer" class="nav-drawer hide" role="dialog" aria-modal="false" aria-label="Menu">
       <a href="#about" class="drawer-link">Over Policy Pilot</a>
       <a href="#how" class="drawer-link">Hoe werkt het?</a>
@@ -53,7 +49,6 @@
 
   <main class="app-shell">
     <section class="page-surface">
-      <!-- Landing / intro state -->
       <section id="intro-hero" class="intro-hero">
         <div class="intro-copy">
           <div class="eyebrow">
@@ -61,10 +56,10 @@
             <span>Introduction</span>
           </div>
 
-          <h2 class="intro-title">
+          <h1 class="intro-title">
             Policy Pilot Tech Sector is een analysetool om snel inzicht te krijgen in wat er speelt
             in de politiek en het publiek m.b.t technologie.
-          </h2>
+          </h1>
 
           <p class="intro-text">
             Het combineert actuele beleidsinformatie met inzichten uit de Edelman Trust Barometer,
@@ -81,7 +76,6 @@
         </div>
       </section>
 
-      <!-- Analysis launcher -->
       <section id="analysis-modal" class="analysis-modal hide" aria-labelledby="analysis-modal-title">
         <div class="analysis-modal__inner">
           <div class="analysis-modal__tag">nieuwe analyse</div>
@@ -129,7 +123,6 @@
         </div>
       </section>
 
-      <!-- Main analysis artifact -->
       <section id="analysis-frame" class="analysis-frame hide" aria-live="polite">
         <div class="analysis-frame__inner">
           <div id="analysis-request-pill" class="analysis-request-pill hide"></div>
@@ -143,61 +136,65 @@
           </div>
 
           <article id="analysis-report" class="analysis-report">
-            <!-- Main analysis gets injected here -->
-          </article>
-
-          <div class="analysis-report__actions">
-            <button id="summary-btn" class="pp-post-btn hide" type="button">Maak samenvatting</button>
-          </div>
-
-          <!-- Follow-up scoped chat -->
-          <section id="chat-modal" class="chat-modal hide" aria-labelledby="chat-modal-title">
-            <div class="chat-modal__tag">stel een vraag</div>
-
-            <button
-              id="close-chat-modal"
-              class="chat-modal__close"
-              type="button"
-              aria-label="Sluit chat invoer"
-            >
-              ×
-            </button>
-
-            <h3 id="chat-modal-title" class="chat-modal__title">Ga in gesprek met het rapport.</h3>
-            <p class="chat-modal__text">Stel vragen over het rapport, of laat het samenvatten.</p>
-
-            <div id="analysis-followup-thread" class="analysis-followup-thread">
-              <!-- Follow-up user / assistant messages appear here -->
+            <div id="analysis-report-body" class="analysis-report__body">
+              <!-- streamed analysis body -->
             </div>
 
-            <div class="chat-composer">
-              <textarea
-                id="chat-input"
-                class="chat-composer__input"
-                placeholder="Stel een vervolgvraag..."
-                aria-label="Vervolgvraag"
-              ></textarea>
+            <section id="analysis-sources" class="analysis-sources">
+              <!-- sources -->
+            </section>
+
+            <div class="analysis-report__actions">
+              <button id="summary-btn" class="pp-post-btn hide" type="button">Maak samenvatting</button>
+            </div>
+
+            <section id="chat-modal" class="chat-modal hide" aria-labelledby="chat-modal-title">
+              <div class="chat-modal__tag">stel een vraag</div>
 
               <button
-                id="chat-send"
-                class="chat-composer__send"
+                id="close-chat-modal"
+                class="chat-modal__close"
                 type="button"
-                aria-label="Verstuur vervolgvraag"
+                aria-label="Sluit chat invoer"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
-                  <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
-                </svg>
+                ×
               </button>
 
-              <button id="open-chat-examples" class="chat-composer__examples" type="button">
-                voorbeeldvragen
-              </button>
-            </div>
-          </section>
+              <h3 id="chat-modal-title" class="chat-modal__title">Ga in gesprek met het rapport.</h3>
+              <p class="chat-modal__text">Stel vragen over het rapport, of laat het samenvatten.</p>
+
+              <div id="analysis-followup-thread" class="analysis-followup-thread">
+                <!-- follow-up messages appear here -->
+              </div>
+
+              <div class="chat-composer">
+                <textarea
+                  id="chat-input"
+                  class="chat-composer__input"
+                  placeholder="Stel een vervolgvraag..."
+                  aria-label="Vervolgvraag"
+                ></textarea>
+
+                <button
+                  id="chat-send"
+                  class="chat-composer__send"
+                  type="button"
+                  aria-label="Verstuur vervolgvraag"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
+                    <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
+                  </svg>
+                </button>
+
+                <button id="open-chat-examples" class="chat-composer__examples" type="button">
+                  voorbeeldvragen
+                </button>
+              </div>
+            </section>
+          </article>
         </div>
       </section>
 
-      <!-- New analysis CTA after loaded analysis -->
       <section id="new-analysis-section" class="new-analysis-section hide">
         <h2>Nieuwe analyse?</h2>
         <p>Laat Policy Pilot opnieuw een analyse doen.</p>
@@ -208,7 +205,6 @@
     </section>
   </main>
 
-  <!-- Analysis examples modal -->
   <div
     id="analysis-examples-modal"
     class="examples-modal hide"
@@ -230,17 +226,12 @@
       </button>
 
       <h2 id="analysis-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
-      <p class="examples-modal__text">
-        Hier komen voorbeeldvragen voor het starten van een analyse.
-      </p>
+      <p class="examples-modal__text">Hier komen voorbeeldvragen voor het starten van een analyse.</p>
 
-      <div id="analysis-examples-list" class="examples-modal__list">
-        <!-- Analysis example cards injected here -->
-      </div>
+      <div id="analysis-examples-list" class="examples-modal__list"></div>
     </div>
   </div>
 
-  <!-- Chat examples modal -->
   <div
     id="chat-examples-modal"
     class="examples-modal hide"
@@ -262,17 +253,12 @@
       </button>
 
       <h2 id="chat-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
-      <p class="examples-modal__text">
-        Hier komen voorbeeldvragen voor vervolgvragen binnen het rapport.
-      </p>
+      <p class="examples-modal__text">Hier komen voorbeeldvragen voor vervolgvragen binnen het rapport.</p>
 
-      <div id="chat-examples-list" class="examples-modal__list">
-        <!-- Chat example cards injected here -->
-      </div>
+      <div id="chat-examples-list" class="examples-modal__list"></div>
     </div>
   </div>
 
-  <!-- Confirm reset modal -->
   <div
     id="confirm-modal"
     class="modal-overlay hide"
@@ -292,7 +278,6 @@
     </div>
   </div>
 
-  <!-- Context Modal -->
   <div id="content-modal" class="pp-modal" aria-hidden="true">
     <div class="pp-modal__backdrop" data-close></div>
     <div class="pp-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="pp-modal-title">
@@ -319,7 +304,6 @@
     </div>
   </div>
 
-  <!-- Main JS -->
   <script type="module" src="/js/main.js"></script>
   <script type="module" src="/js/modal.js"></script>
   <script type="module" src="/js/logout.js"></script>

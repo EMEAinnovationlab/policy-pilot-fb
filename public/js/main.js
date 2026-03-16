@@ -10,7 +10,7 @@
 // - runs the first analysis as a real RAG request via /chat
 // - streams the response into the analysis report
 // - hides the intro action row after first analysis
-// - reveals the follow-up chat modal inside the analysis frame
+// - places the follow-up chat area INSIDE the analysis box
 // - keeps follow-up chat as placeholder for now
 // ------------------------------------------------------------
 
@@ -88,6 +88,8 @@ const dom = {
   analysisStatus: document.getElementById('analysis-status'),
   analysisStatusText: document.getElementById('analysis-status-text'),
   analysisReport: document.getElementById('analysis-report'),
+  analysisReportBody: document.getElementById('analysis-report-body'),
+  analysisSources: document.getElementById('analysis-sources'),
   summaryBtn: document.getElementById('summary-btn'),
 
   chatModal: document.getElementById('chat-modal'),
@@ -361,7 +363,6 @@ function openAnalysisModal({ reset = false } = {}) {
   }
 
   show(dom.analysisModal);
-  hide(dom.chatModal);
 
   appState.phase = 'analysis-modal-open';
 
@@ -442,7 +443,8 @@ function hardResetAnalysisState() {
   }
   hide(dom.analysisStatus);
 
-  setHtml(dom.analysisReport, '');
+  setHtml(dom.analysisReportBody, '');
+  setHtml(dom.analysisSources, '');
   setHtml(dom.analysisFollowupThread, '');
 
   closeAnalysisExamplesModal();
@@ -474,7 +476,7 @@ function renderAnalysisLoadingState(prompt) {
   }
   show(dom.analysisStatus);
 
-  setHtml(dom.analysisReport, `
+  setHtml(dom.analysisReportBody, `
     <div class="eyebrow">
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
       <span>Policy en trust rapport</span>
@@ -483,12 +485,13 @@ function renderAnalysisLoadingState(prompt) {
     <p>Even wachten. Policy Pilot zoekt relevante documentfragmenten en bouwt nu een analyse op.</p>
   `);
 
+  setHtml(dom.analysisSources, '');
   hide(dom.summaryBtn);
   hide(dom.chatModal);
 }
 
 function renderAnalysisStreamingStart() {
-  setHtml(dom.analysisReport, `
+  setHtml(dom.analysisReportBody, `
     <div class="eyebrow">
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
       <span>Policy en trust rapport</span>
@@ -504,14 +507,12 @@ function updateAnalysisStream(markdownText) {
 }
 
 function renderAnalysisSources(sources) {
-  if (!dom.analysisReport || !Array.isArray(sources) || !sources.length) return;
+  if (!dom.analysisSources || !Array.isArray(sources) || !sources.length) {
+    setHtml(dom.analysisSources, '');
+    return;
+  }
 
-  const existing = dom.analysisReport.querySelector('.analysis-sources');
-  if (existing) existing.remove();
-
-  const wrapper = document.createElement('section');
-  wrapper.className = 'analysis-sources';
-  wrapper.innerHTML = `
+  setHtml(dom.analysisSources, `
     <h3>Bronnen</h3>
     <ul class="analysis-sources__list">
       ${sources.map((src) => `
@@ -521,9 +522,7 @@ function renderAnalysisSources(sources) {
         </li>
       `).join('')}
     </ul>
-  `;
-
-  dom.analysisReport.appendChild(wrapper);
+  `);
 }
 
 function renderAnalysisDone(finalMarkdown, sources) {
@@ -553,7 +552,7 @@ function renderAnalysisError(message) {
   }
   show(dom.analysisStatus);
 
-  setHtml(dom.analysisReport, `
+  setHtml(dom.analysisReportBody, `
     <div class="eyebrow">
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
       <span>Policy en trust rapport</span>
@@ -562,6 +561,7 @@ function renderAnalysisError(message) {
     <p>${escapeHtml(message || 'Onbekende fout')}</p>
   `);
 
+  setHtml(dom.analysisSources, '');
   hide(dom.summaryBtn);
   hide(dom.chatModal);
 }
