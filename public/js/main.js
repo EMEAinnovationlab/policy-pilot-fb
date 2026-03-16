@@ -564,4 +564,4 @@ function openExamples() {
 // --------------------- Start the app ---------------------------------
 boot().catch(err => {
   console.error('Boot failed:', err);
-});
+}); 
