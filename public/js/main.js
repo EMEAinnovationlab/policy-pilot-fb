@@ -1,29 +1,21 @@
 // main.js
 // ------------------------------------------------------------
-// This file is the main entry point of the frontend.
+// Main frontend entry for the analysis-first Policy Pilot flow.
 //
-// What it does:
-// - enforces auth
-// - loads project prompts/settings
-// - initializes the context page router
-// - controls the new analysis UI flow
-// - opens/closes the analysis modal
-// - reveals the analysis frame after submit
-// - reveals the follow-up chat modal inside the analysis frame
-// - controls example-question modals
-// - controls reset / "begin opnieuw" flow
+// Step implemented in this version:
+// - real analysis request with RAG
+// - streams backend /chat response into analysis-report
+// - uses useRetrieval: true for the first analysis request
 //
-// Important:
-// This version is the transition step from chatbot-first
-// to analysis-tool-first.
-// It focuses on UI states first, before reconnecting the
-// full streaming chat logic.
+// Still placeholder for now:
+// - follow-up chat in chat-modal
+// - summary button behavior
+// - loading examples from Supabase by modal type
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
 import { initSiteRouter } from '/js/siteRouter.js';
 
-// Require logged-in user
 await enforceRole({ requiredRole: null });
 
 // ------------------------------------------------------------
@@ -57,14 +49,10 @@ async function loadProjectPromptsFromServer() {
     }
 
     const intro = data.settings?.introduction_prompt;
-    if (intro && intro.trim()) {
-      DEFAULT_WELCOME_PROMPT = intro.trim();
-    }
+    if (intro && intro.trim()) DEFAULT_WELCOME_PROMPT = intro.trim();
 
     const summary = data.settings?.summary_prompt;
-    if (summary && summary.trim()) {
-      SUMMARY_PROMPT = summary.trim();
-    }
+    if (summary && summary.trim()) SUMMARY_PROMPT = summary.trim();
   } catch (err) {
     console.warn('Project prompt fallback used:', err?.message || err);
   }
@@ -76,7 +64,6 @@ await loadProjectPromptsFromServer();
 // DOM
 // ------------------------------------------------------------
 const dom = {
-  // Main contextual modal
   modal: document.getElementById('content-modal'),
   modalTitle: document.getElementById('pp-modal-title'),
   modalContent: document.getElementById('pp-modal-content'),
@@ -86,17 +73,14 @@ const dom = {
   linkHow: document.querySelector('a[href="#how"]'),
   linkData: document.querySelector('a[href="#data"]'),
 
-  // Intro / landing
   introHero: document.getElementById('intro-hero'),
 
-  // Analysis launcher
   analysisModal: document.getElementById('analysis-modal'),
   analysisInput: document.getElementById('analysis-input'),
   analysisSend: document.getElementById('analysis-send'),
   openAnalysisModalBtn: document.getElementById('open-analysis-modal'),
   closeAnalysisModalBtn: document.getElementById('close-analysis-modal'),
 
-  // Analysis artifact
   analysisFrame: document.getElementById('analysis-frame'),
   analysisRequestPill: document.getElementById('analysis-request-pill'),
   analysisStatus: document.getElementById('analysis-status'),
@@ -104,72 +88,58 @@ const dom = {
   analysisReport: document.getElementById('analysis-report'),
   summaryBtn: document.getElementById('summary-btn'),
 
-  // Follow-up chat inside analysis
   chatModal: document.getElementById('chat-modal'),
   closeChatModalBtn: document.getElementById('close-chat-modal'),
   chatInput: document.getElementById('chat-input'),
   chatSend: document.getElementById('chat-send'),
   analysisFollowupThread: document.getElementById('analysis-followup-thread'),
 
-  // New analysis CTA after report
   newAnalysisSection: document.getElementById('new-analysis-section'),
   startNewAnalysisBottomBtn: document.getElementById('start-new-analysis-bottom'),
 
-  // Header / drawer buttons
   newAnalysisNavBtn: document.getElementById('new-analysis-nav'),
   newAnalysisDrawerBtn: document.getElementById('new-analysis-drawer'),
 
-  // Analysis examples modal
   analysisExamplesModal: document.getElementById('analysis-examples-modal'),
   analysisExamplesList: document.getElementById('analysis-examples-list'),
   openAnalysisExamplesBtn: document.getElementById('open-analysis-examples'),
   closeAnalysisExamplesBtn: document.getElementById('close-analysis-examples'),
 
-  // Chat examples modal
   chatExamplesModal: document.getElementById('chat-examples-modal'),
   chatExamplesList: document.getElementById('chat-examples-list'),
   openChatExamplesBtn: document.getElementById('open-chat-examples'),
   closeChatExamplesBtn: document.getElementById('close-chat-examples'),
 
-  // Confirm reset modal
   confirmModal: document.getElementById('confirm-modal'),
   modalCancelBtn: document.getElementById('modal-cancel'),
   clearBtn: document.getElementById('clear')
 };
 
 // ------------------------------------------------------------
-// App state
+// State
 // ------------------------------------------------------------
 const appState = {
-  phase: 'idle', // idle | analysis-modal-open | analysis-loading | analysis-loaded
+  phase: 'idle',
   activeAnalysisPrompt: '',
   activeAnalysisContent: '',
-  followupHistory: []
-};
-
-// Make config available for future modules if needed
-window.__policyPilotConfig = {
-  STRAPLINE,
-  DEFAULT_WELCOME_PROMPT,
-  SUMMARY_PROMPT
+  activeAnalysisSources: [],
+  followupHistory: [],
+  analysisAbortController: null
 };
 
 // ------------------------------------------------------------
-// Utilities
+// Helpers
 // ------------------------------------------------------------
 function show(el) {
-  if (!el) return;
-  el.classList.remove('hide');
+  if (el) el.classList.remove('hide');
 }
 
 function hide(el) {
-  if (!el) return;
-  el.classList.add('hide');
+  if (el) el.classList.add('hide');
 }
 
 function setHtml(el, html) {
-  if (!el) return;
-  el.innerHTML = html;
+  if (el) el.innerHTML = html;
 }
 
 function escapeHtml(value) {
@@ -204,8 +174,35 @@ function scrollIntoViewCentered(el) {
   });
 }
 
+function parseMarkdown(md) {
+  if (window.marked?.parse) {
+    return window.marked.parse(md || '');
+  }
+  return escapeHtml(md || '').replace(/\n/g, '<br>');
+}
+
+function setAnalysisSendLoading(isLoading) {
+  if (!dom.analysisSend) return;
+
+  dom.analysisSend.disabled = isLoading;
+
+  if (isLoading) {
+    dom.analysisSend.dataset.loading = '1';
+    dom.analysisInput?.setAttribute('aria-busy', 'true');
+    if (dom.analysisInput) dom.analysisInput.disabled = true;
+  } else {
+    delete dom.analysisSend.dataset.loading;
+    dom.analysisInput?.removeAttribute('aria-busy');
+    if (dom.analysisInput) dom.analysisInput.disabled = false;
+  }
+}
+
+function closeDrawerIfOpen() {
+  window.__closePolicyPilotDrawer?.();
+}
+
 // ------------------------------------------------------------
-// Site/context modal router
+// Router
 // ------------------------------------------------------------
 initSiteRouter({
   modal: dom.modal,
@@ -271,11 +268,8 @@ initSiteRouter({
 })();
 
 // ------------------------------------------------------------
-// Example cards
-// For now these are temporary placeholders.
-// Later we will load them from Supabase by type:
-// - analysis_modal
-// - chat_modal
+// Temporary example cards
+// Later: load from Supabase by example type.
 // ------------------------------------------------------------
 const analysisExampleQuestions = [
   {
@@ -349,7 +343,7 @@ renderExampleCards(dom.chatExamplesList, chatExampleQuestions, (prompt) => {
 });
 
 // ------------------------------------------------------------
-// Analysis modal state
+// Modal state
 // ------------------------------------------------------------
 function openAnalysisModal({ reset = false } = {}) {
   if (reset) {
@@ -395,7 +389,7 @@ function closeChatModal() {
 }
 
 // ------------------------------------------------------------
-// Reset / restart flow
+// Reset flow
 // ------------------------------------------------------------
 function openConfirmModal() {
   show(dom.confirmModal);
@@ -406,10 +400,16 @@ function closeConfirmModal() {
 }
 
 function hardResetAnalysisState() {
+  try {
+    appState.analysisAbortController?.abort();
+  } catch {}
+
   appState.phase = 'idle';
   appState.activeAnalysisPrompt = '';
   appState.activeAnalysisContent = '';
+  appState.activeAnalysisSources = [];
   appState.followupHistory = [];
+  appState.analysisAbortController = null;
 
   resetTextarea(dom.analysisInput);
   resetTextarea(dom.chatInput);
@@ -436,6 +436,7 @@ function hardResetAnalysisState() {
   closeAnalysisExamplesModal();
   closeChatExamplesModal();
   closeConfirmModal();
+  setAnalysisSendLoading(false);
 
   requestAnimationFrame(() => {
     dom.introHero?.scrollIntoView({
@@ -446,13 +447,9 @@ function hardResetAnalysisState() {
 }
 
 // ------------------------------------------------------------
-// Temporary analysis rendering
-// This is the step before reconnecting the full backend flow.
+// Analysis rendering
 // ------------------------------------------------------------
-function renderAnalysisShell({ prompt }) {
-  appState.activeAnalysisPrompt = prompt;
-  appState.phase = 'analysis-loading';
-
+function renderAnalysisLoadingState(prompt) {
   revealAnalysisFrame();
 
   if (dom.analysisRequestPill) {
@@ -461,7 +458,7 @@ function renderAnalysisShell({ prompt }) {
   }
 
   if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Er wordt een nieuwe analyse voorbereid.';
+    dom.analysisStatusText.textContent = 'Bezig met bronanalyse in politieke data en trustdata...';
   }
   show(dom.analysisStatus);
 
@@ -470,53 +467,66 @@ function renderAnalysisShell({ prompt }) {
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
       <span>Policy en trust rapport</span>
     </div>
-
-    <h2>Analyse wordt geladen...</h2>
-    <p>
-      Dit is tijdelijk een placeholder-staat. In de volgende stap koppelen we dit
-      weer aan de echte RAG-analyse.
-    </p>
+    <h2>Analyse wordt gegenereerd...</h2>
+    <p>Even wachten. Policy Pilot zoekt relevante documentfragmenten en bouwt nu een analyse op.</p>
   `);
 
   hide(dom.summaryBtn);
   hide(dom.chatModal);
 }
 
-function renderLoadedAnalysis({ prompt }) {
-  const safePrompt = escapeHtml(prompt);
-
-  const placeholderHtml = `
+function renderAnalysisStreamingStart() {
+  setHtml(dom.analysisReport, `
     <div class="eyebrow">
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
       <span>Policy en trust rapport</span>
     </div>
+    <div id="analysis-stream-content"></div>
+  `);
+}
 
-    <h2>Analyse op basis van jouw vraag</h2>
+function updateAnalysisStream(markdownText) {
+  const streamEl = document.getElementById('analysis-stream-content');
+  if (!streamEl) return;
+  streamEl.innerHTML = parseMarkdown(markdownText);
+}
 
-    <p>
-      Hieronder zie je tijdelijk een statische analyse-box. In de volgende stap
-      verbinden we deze met de echte backend-response, zodat de analyse live in
-      dit frame wordt geladen.
-    </p>
+function renderAnalysisSources(sources) {
+  if (!dom.analysisReport || !Array.isArray(sources) || !sources.length) return;
 
-    <p><strong>Vraag:</strong> ${safePrompt}</p>
+  const existing = dom.analysisReport.querySelector('.analysis-sources');
+  if (existing) existing.remove();
 
-    <p>
-      Deze box wordt de hoofdcontext van de verdere interactie. Vervolgvragen zullen
-      later niet meer als algemene chatbot-flow werken, maar als vragen die
-      expliciet gebaseerd zijn op deze analyse.
-    </p>
+  const wrapper = document.createElement('section');
+  wrapper.className = 'analysis-sources';
+  wrapper.innerHTML = `
+    <h3>Bronnen</h3>
+    <ul class="analysis-sources__list">
+      ${sources.map((src) => `
+        <li class="analysis-sources__item">
+          <span class="analysis-sources__n">[#${escapeHtml(src.n)}]</span>
+          <span class="analysis-sources__title">${escapeHtml(src.title || 'Bron')}</span>
+        </li>
+      `).join('')}
+    </ul>
   `;
 
-  appState.activeAnalysisContent = placeholderHtml;
+  dom.analysisReport.appendChild(wrapper);
+}
+
+function renderAnalysisDone(finalMarkdown, sources) {
+  appState.activeAnalysisContent = finalMarkdown;
+  appState.activeAnalysisSources = sources || [];
   appState.phase = 'analysis-loaded';
 
   if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Er is relevante informatie gevonden voor deze analyse.';
+    dom.analysisStatusText.textContent = 'Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.';
   }
   show(dom.analysisStatus);
 
-  setHtml(dom.analysisReport, placeholderHtml);
+  updateAnalysisStream(finalMarkdown);
+  renderAnalysisSources(sources);
+
   show(dom.summaryBtn);
   openChatModal();
   show(dom.newAnalysisSection);
@@ -525,24 +535,122 @@ function renderLoadedAnalysis({ prompt }) {
   scrollIntoViewCentered(dom.analysisFrame);
 }
 
-async function submitAnalysisRequest() {
-  const prompt = (dom.analysisInput?.value || '').trim();
-  if (!prompt) return;
+function renderAnalysisError(message) {
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = 'De analyse kon niet worden voltooid.';
+  }
+  show(dom.analysisStatus);
 
-  closeAnalysisModal();
-  renderAnalysisShell({ prompt });
+  setHtml(dom.analysisReport, `
+    <div class="eyebrow">
+      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
+      <span>Policy en trust rapport</span>
+    </div>
+    <h2>Er ging iets mis</h2>
+    <p>${escapeHtml(message || 'Onbekende fout')}</p>
+  `);
 
-  // Temporary fake loading step.
-  // Later this will call the real /chat endpoint in analysis mode.
-  await new Promise((resolve) => setTimeout(resolve, 450));
-
-  renderLoadedAnalysis({ prompt });
+  hide(dom.summaryBtn);
+  hide(dom.chatModal);
 }
 
 // ------------------------------------------------------------
-// Follow-up chat rendering
-// For now this is local placeholder behavior.
-// Later this will use analysisContext + followup history.
+// Real RAG analysis request
+// ------------------------------------------------------------
+async function submitAnalysisRequest() {
+  const prompt = (dom.analysisInput?.value || '').trim();
+  if (!prompt) return;
+  if (appState.analysisAbortController) return;
+
+  appState.activeAnalysisPrompt = prompt;
+  appState.activeAnalysisContent = '';
+  appState.activeAnalysisSources = [];
+  appState.followupHistory = [];
+  appState.phase = 'analysis-loading';
+
+  closeAnalysisModal();
+  renderAnalysisLoadingState(prompt);
+  setAnalysisSendLoading(true);
+
+  const controller = new AbortController();
+  appState.analysisAbortController = controller;
+
+  try {
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: prompt,
+        useRetrieval: true,
+        history: []
+      }),
+      signal: controller.signal
+    });
+
+    if (!resp.ok || !resp.body) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || 'Failed to connect to /chat');
+    }
+
+    renderAnalysisStreamingStart();
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+    let sources = [];
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+
+        const payload = trimmed.slice(5).trim();
+        if (!payload) continue;
+
+        try {
+          const evt = JSON.parse(payload);
+
+          if (evt.type === 'token') {
+            fullText += evt.text || '';
+            updateAnalysisStream(fullText);
+          } else if (evt.type === 'sources') {
+            sources = Array.isArray(evt.items) ? evt.items : [];
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message || 'Unknown analysis error');
+          } else if (evt.type === 'done') {
+            renderAnalysisDone(fullText, sources);
+            return;
+          }
+        } catch (err) {
+          if (err instanceof Error) throw err;
+        }
+      }
+    }
+
+    renderAnalysisDone(fullText, sources);
+  } catch (err) {
+    if (controller.signal.aborted) {
+      renderAnalysisError('De analyse is afgebroken.');
+    } else {
+      renderAnalysisError(err?.message || 'Server error tijdens analyse.');
+    }
+  } finally {
+    appState.analysisAbortController = null;
+    setAnalysisSendLoading(false);
+  }
+}
+
+// ------------------------------------------------------------
+// Placeholder follow-up chat
+// Next step: use analysis content as context.
 // ------------------------------------------------------------
 function appendFollowupMessage(role, html) {
   if (!dom.analysisFollowupThread) return null;
@@ -551,7 +659,6 @@ function appendFollowupMessage(role, html) {
   div.className = `msg ${role}`;
   div.innerHTML = html;
   dom.analysisFollowupThread.appendChild(div);
-
   dom.analysisFollowupThread.scrollTop = dom.analysisFollowupThread.scrollHeight;
   return div;
 }
@@ -568,8 +675,6 @@ async function submitFollowupQuestion() {
     content: prompt
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 220));
-
   appendFollowupMessage(
     'assistant',
     `
@@ -578,19 +683,11 @@ async function submitFollowupQuestion() {
         <span>Policy Pilot</span>
       </div>
       <p>
-        Dit is tijdelijk een placeholder-antwoord binnen de <strong>chat-modal</strong>.
-        In de volgende stap koppelen we deze vervolgvraag aan de actieve analyse als context,
-        zodat de gebruiker echt “in gesprek met het rapport” is.
+        De hoofd-analyse werkt nu live met RAG. De vervolgvraag-flow is de volgende stap:
+        die gaan we koppelen aan dit rapport als primaire context.
       </p>
     `
   );
-
-  appState.followupHistory.push({
-    role: 'assistant',
-    content: 'Temporary placeholder follow-up answer.'
-  });
-
-  scrollIntoViewCentered(dom.chatModal);
 }
 
 // ------------------------------------------------------------
@@ -615,8 +712,6 @@ function closeChatExamplesModal() {
 // ------------------------------------------------------------
 // Events
 // ------------------------------------------------------------
-
-// Open analysis entry
 dom.openAnalysisModalBtn?.addEventListener('click', () => {
   openAnalysisModal({ reset: false });
 });
@@ -626,7 +721,7 @@ dom.newAnalysisNavBtn?.addEventListener('click', () => {
 });
 
 dom.newAnalysisDrawerBtn?.addEventListener('click', () => {
-  window.__closePolicyPilotDrawer?.();
+  closeDrawerIfOpen();
   openConfirmModal();
 });
 
@@ -634,12 +729,10 @@ dom.startNewAnalysisBottomBtn?.addEventListener('click', () => {
   openConfirmModal();
 });
 
-// Close analysis launcher
 dom.closeAnalysisModalBtn?.addEventListener('click', () => {
   closeAnalysisModal();
 });
 
-// Submit new analysis
 dom.analysisSend?.addEventListener('click', submitAnalysisRequest);
 
 dom.analysisInput?.addEventListener('keydown', (e) => {
@@ -654,7 +747,6 @@ dom.analysisInput?.addEventListener('keydown', (e) => {
   dom.chatInput?.addEventListener(ev, () => autoGrowTextarea(dom.chatInput));
 });
 
-// Follow-up chat
 dom.chatSend?.addEventListener('click', submitFollowupQuestion);
 
 dom.chatInput?.addEventListener('keydown', (e) => {
@@ -664,21 +756,11 @@ dom.chatInput?.addEventListener('keydown', (e) => {
   }
 });
 
-// Close follow-up modal
 dom.closeChatModalBtn?.addEventListener('click', () => {
   closeChatModal();
 });
 
-// Summary placeholder
-dom.summaryBtn?.addEventListener('click', async () => {
-  if (!SUMMARY_PROMPT) {
-    appendFollowupMessage(
-      'assistant',
-      `<p>Er is nog geen summary prompt ingesteld in de project settings.</p>`
-    );
-    return;
-  }
-
+dom.summaryBtn?.addEventListener('click', () => {
   appendFollowupMessage(
     'assistant',
     `
@@ -687,14 +769,12 @@ dom.summaryBtn?.addEventListener('click', async () => {
         <span>Samenvatting</span>
       </div>
       <p>
-        De samenvattingsfunctie is structureel voorbereid. In de volgende stap
-        koppelen we deze knop aan de echte analyse-output en backend-flow.
+        De analyse zelf is nu live gekoppeld. De samenvattingsknop koppelen we in de volgende stap aan de echte analyse-output.
       </p>
     `
   );
 });
 
-// Analysis examples
 dom.openAnalysisExamplesBtn?.addEventListener('click', () => {
   openAnalysisExamplesModal();
 });
@@ -707,7 +787,6 @@ dom.analysisExamplesModal?.querySelector('[data-close-analysis-examples]')?.addE
   closeAnalysisExamplesModal();
 });
 
-// Chat examples
 dom.openChatExamplesBtn?.addEventListener('click', () => {
   openChatExamplesModal();
 });
@@ -720,7 +799,6 @@ dom.chatExamplesModal?.querySelector('[data-close-chat-examples]')?.addEventList
   closeChatExamplesModal();
 });
 
-// Confirm modal
 dom.modalCancelBtn?.addEventListener('click', () => {
   closeConfirmModal();
 });
@@ -730,7 +808,6 @@ dom.clearBtn?.addEventListener('click', () => {
   openAnalysisModal({ reset: true });
 });
 
-// Escape handling
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
 
@@ -756,10 +833,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ------------------------------------------------------------
-// Initial UI state
+// Initial state
 // ------------------------------------------------------------
 hide(dom.analysisModal);
-hide(dom.analysisFrame);
+hideAnalysisFrame();
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
