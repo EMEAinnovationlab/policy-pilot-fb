@@ -10,6 +10,11 @@
 // - analysis-first RAG flow
 // - 5-minute browser session restore
 // - chat-with-analysis inside the analysis box
+//
+// Updated:
+// - intro action buttons now disappear when the analysis modal opens
+// - if the user closes the analysis modal without an active analysis,
+//   the intro action buttons come back
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -475,6 +480,7 @@ function requestNewConversation() {
 function openAnalysisModal({ reset = false } = {}) {
   if (reset) resetTextarea(dom.analysisInput);
 
+  hideIntroActions();
   show(dom.analysisModal);
   appState.phase = 'analysis-modal-open';
 
@@ -490,6 +496,10 @@ function closeAnalysisModal() {
 
   if (appState.phase === 'analysis-modal-open') {
     appState.phase = appState.activeAnalysisContent ? 'analysis-loaded' : 'idle';
+  }
+
+  if (!appState.activeAnalysisContent) {
+    showIntroActions();
   }
 }
 
@@ -670,7 +680,6 @@ async function submitAnalysisRequest() {
   appState.followupHistory = [];
   appState.phase = 'analysis-loading';
 
-  hideIntroActions();
   closeAnalysisModal();
   renderLoading(prompt);
   setAnalysisSendLoading(true);
@@ -816,7 +825,7 @@ function closeChatExamplesModal() {
 // Events
 // ------------------------------------------------------------
 
-// Open first analysis launcher
+// Open analysis launcher
 dom.openAnalysisModalBtn?.addEventListener('click', () => {
   openAnalysisModal({ reset: false });
 });
@@ -852,7 +861,7 @@ dom.chatInput?.addEventListener('keydown', (e) => {
   dom.chatInput?.addEventListener(ev, () => autoGrowTextarea(dom.chatInput));
 });
 
-// Chat modal close button only hides the conversation input block
+// Close chat input block only
 dom.closeChatModalBtn?.addEventListener('click', () => {
   closeChatModal();
 });
@@ -908,7 +917,7 @@ dom.chatExamplesModal
     closeChatExamplesModal();
   });
 
-// New conversation / begin opnieuw buttons must show confirm
+// New conversation / begin opnieuw buttons show confirm
 dom.newAnalysisNavBtn?.addEventListener('click', requestNewConversation);
 dom.newAnalysisDrawerBtn?.addEventListener('click', requestNewConversation);
 dom.startNewAnalysisBottomBtn?.addEventListener('click', requestNewConversation);
