@@ -1305,7 +1305,7 @@ x§
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 68vh;
+  /* min-height: 68vh; */
 }
 
 .intro-copy {
