@@ -2,15 +2,16 @@
 // ------------------------------------------------------------
 // Main frontend entry for the analysis-first Policy Pilot flow.
 //
-// Step implemented in this version:
-// - real analysis request with RAG
-// - streams backend /chat response into analysis-report
-// - uses useRetrieval: true for the first analysis request
-//
-// Still placeholder for now:
-// - follow-up chat in chat-modal
-// - summary button behavior
-// - loading examples from Supabase by modal type
+// What this version does:
+// - enforces auth
+// - loads project prompts/settings
+// - initializes the site/context router
+// - opens/closes the analysis modal
+// - runs the first analysis as a real RAG request via /chat
+// - streams the response into the analysis report
+// - hides the intro action row after first analysis
+// - reveals the follow-up chat modal inside the analysis frame
+// - keeps follow-up chat as placeholder for now
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -74,6 +75,7 @@ const dom = {
   linkData: document.querySelector('a[href="#data"]'),
 
   introHero: document.getElementById('intro-hero'),
+  introActions: document.querySelector('.intro-actions'),
 
   analysisModal: document.getElementById('analysis-modal'),
   analysisInput: document.getElementById('analysis-input'),
@@ -201,6 +203,14 @@ function closeDrawerIfOpen() {
   window.__closePolicyPilotDrawer?.();
 }
 
+function hideIntroActions() {
+  hide(dom.introActions);
+}
+
+function showIntroActions() {
+  show(dom.introActions);
+}
+
 // ------------------------------------------------------------
 // Router
 // ------------------------------------------------------------
@@ -269,7 +279,7 @@ initSiteRouter({
 
 // ------------------------------------------------------------
 // Temporary example cards
-// Later: load from Supabase by example type.
+// Later: load from Supabase by example type
 // ------------------------------------------------------------
 const analysisExampleQuestions = [
   {
@@ -410,6 +420,8 @@ function hardResetAnalysisState() {
   appState.activeAnalysisSources = [];
   appState.followupHistory = [];
   appState.analysisAbortController = null;
+
+  showIntroActions();
 
   resetTextarea(dom.analysisInput);
   resetTextarea(dom.chatInput);
@@ -568,6 +580,7 @@ async function submitAnalysisRequest() {
   appState.followupHistory = [];
   appState.phase = 'analysis-loading';
 
+  hideIntroActions();
   closeAnalysisModal();
   renderAnalysisLoadingState(prompt);
   setAnalysisSendLoading(true);
@@ -650,7 +663,7 @@ async function submitAnalysisRequest() {
 
 // ------------------------------------------------------------
 // Placeholder follow-up chat
-// Next step: use analysis content as context.
+// Next step: use analysis content as context
 // ------------------------------------------------------------
 function appendFollowupMessage(role, html) {
   if (!dom.analysisFollowupThread) return null;
@@ -683,8 +696,7 @@ async function submitFollowupQuestion() {
         <span>Policy Pilot</span>
       </div>
       <p>
-        De hoofd-analyse werkt nu live met RAG. De vervolgvraag-flow is de volgende stap:
-        die gaan we koppelen aan dit rapport als primaire context.
+        De hoofd-analyse werkt nu live gekoppeld aan RAG. De vervolgvraag-flow koppelen we hierna aan dit rapport als primaire context.
       </p>
     `
   );
@@ -846,3 +858,4 @@ closeChatExamplesModal();
 
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
+showIntroActions();
