@@ -1236,7 +1236,7 @@ window.addEventListener('keydown', (e) => {
 // Initial state
 // ------------------------------------------------------------
 hide(dom.analysisModal);
-hide(dom.analysisFrame);
+hide(dom.analysisFrame);s
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
