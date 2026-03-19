@@ -1848,14 +1848,3 @@ x§
   }
 }
 
-
-#scroll-to-bottom-btn {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-#scroll-to-bottom-btn.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}

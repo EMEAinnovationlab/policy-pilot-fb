@@ -22,9 +22,9 @@
 // - when a new message/block appears, the UI scrolls to the start
 //   of that new block to guide reading from the top
 // - scroll-to-bottom button only appears after an analysis is loaded
-// - scroll-to-bottom button fades in only while the user is scrolling
-// - scroll-to-bottom button fades away shortly after scrolling stops
+// - scroll-to-bottom button disappears again when the user is at the bottom
 // - scroll detection now uses the real scroll container instead of assuming window
+// - analysis modal now scrolls correctly inside .analysis-modal__inner
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -101,6 +101,7 @@ const dom = {
 
   // Analysis launcher
   analysisModal: document.getElementById('analysis-modal'),
+  analysisModalInner: document.querySelector('#analysis-modal .analysis-modal__inner'),
   analysisInput: document.getElementById('analysis-input'),
   analysisSend: document.getElementById('analysis-send'),
   openAnalysisModalBtn: document.getElementById('open-analysis-modal'),
@@ -152,9 +153,7 @@ const appState = {
   activeAnalysisContent: '',
   activeAnalysisSources: [],
   followupHistory: [],
-  analysisAbortController: null,
-  scrollFadeTimer: null,
-  isUserScrolling: false
+  analysisAbortController: null
 };
 
 // ------------------------------------------------------------
@@ -249,10 +248,48 @@ function scrollElementIntoViewWithinRoot(el, block = 'center') {
 
     if (block === 'center') {
       targetTop = targetTop - (root.clientHeight / 2) + (elRect.height / 2);
+    } else if (block === 'end') {
+      targetTop = targetTop - root.clientHeight + elRect.height;
     }
 
     root.scrollTo({
       top: Math.max(0, targetTop),
+      behavior: 'smooth'
+    });
+  });
+}
+
+function getElementRelativeOffset(container, el) {
+  const containerRect = container.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  return container.scrollTop + (elRect.top - containerRect.top);
+}
+
+function scrollElementIntoViewWithinContainer(container, el, block = 'start') {
+  if (!container || !el) return;
+
+  requestAnimationFrame(() => {
+    let targetTop = getElementRelativeOffset(container, el);
+
+    if (block === 'center') {
+      targetTop = targetTop - (container.clientHeight / 2) + (el.offsetHeight / 2);
+    } else if (block === 'end') {
+      targetTop = targetTop - container.clientHeight + el.offsetHeight;
+    }
+
+    container.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth'
+    });
+  });
+}
+
+function scrollContainerToTop(container) {
+  if (!container) return;
+
+  requestAnimationFrame(() => {
+    container.scrollTo({
+      top: 0,
       behavior: 'smooth'
     });
   });
@@ -264,6 +301,11 @@ function scrollIntoViewCentered(el) {
 
 function scrollMessageToTop(messageEl) {
   scrollElementIntoViewWithinRoot(messageEl, 'start');
+}
+
+function scrollAnalysisModalInnerToTop() {
+  if (!dom.analysisModalInner) return;
+  scrollContainerToTop(dom.analysisModalInner);
 }
 
 function pageCanScroll() {
@@ -282,21 +324,12 @@ function updateScrollToBottomButton() {
   if (!btn) return;
 
   const analysisIsReady = appState.phase === 'analysis-loaded';
-  const shouldExist = analysisIsReady && pageCanScroll() && !isNearBottom();
-  const shouldBeVisible = shouldExist && appState.isUserScrolling;
+  const shouldShow = analysisIsReady && pageCanScroll() && !isNearBottom();
 
-  if (!shouldExist) {
-    btn.classList.add('hide');
-    btn.classList.remove('is-visible');
-    return;
-  }
-
-  btn.classList.remove('hide');
-
-  if (shouldBeVisible) {
-    btn.classList.add('is-visible');
+  if (shouldShow) {
+    btn.classList.remove('hide');
   } else {
-    btn.classList.remove('is-visible');
+    btn.classList.add('hide');
   }
 }
 
@@ -306,45 +339,21 @@ function scheduleScrollButtonUpdate() {
   });
 }
 
-function clearScrollFadeTimer() {
-  if (!appState.scrollFadeTimer) return;
-  clearTimeout(appState.scrollFadeTimer);
-  appState.scrollFadeTimer = null;
-}
-
-function markUserScrolling() {
-  appState.isUserScrolling = true;
-  updateScrollToBottomButton();
-
-  clearScrollFadeTimer();
-
-  appState.scrollFadeTimer = setTimeout(() => {
-    appState.isUserScrolling = false;
-    updateScrollToBottomButton();
-  }, 700);
-}
-
 function scrollToPageBottom() {
   const { root, scrollHeight } = getScrollMetrics();
-
-  appState.isUserScrolling = false;
-  clearScrollFadeTimer();
 
   if (root === window) {
     window.scrollTo({
       top: scrollHeight,
       behavior: 'smooth'
     });
-  } else {
-    root.scrollTo({
-      top: scrollHeight,
-      behavior: 'smooth'
-    });
+    return;
   }
 
-  setTimeout(() => {
-    updateScrollToBottomButton();
-  }, 350);
+  root.scrollTo({
+    top: scrollHeight,
+    behavior: 'smooth'
+  });
 }
 
 function hideIntroActions() {
@@ -558,7 +567,6 @@ function closeDrawerIfOpen() {
 
 // ------------------------------------------------------------
 // Example prompts
-// Later: replace with Supabase typed examples
 // ------------------------------------------------------------
 const analysisExampleQuestions = [
   {
@@ -675,6 +683,7 @@ function openAnalysisModal({ reset = false } = {}) {
   scrollIntoViewCentered(dom.analysisModal);
 
   requestAnimationFrame(() => {
+    scrollAnalysisModalInnerToTop();
     dom.analysisInput?.focus();
   });
 }
@@ -722,9 +731,6 @@ function hardResetAnalysisState() {
   appState.followupHistory = [];
   appState.analysisAbortController = null;
 
-  clearScrollFadeTimer();
-  appState.isUserScrolling = false;
-
   showIntroActions();
 
   resetTextarea(dom.analysisInput);
@@ -755,6 +761,10 @@ function hardResetAnalysisState() {
   closeConfirmModal();
   setAnalysisSendLoading(false);
   setChatSendLoading(false);
+
+  if (dom.analysisModalInner) {
+    dom.analysisModalInner.scrollTop = 0;
+  }
 
   updateScrollToBottomButton();
 }
@@ -1191,6 +1201,12 @@ ${appState.activeAnalysisContent}
 // ------------------------------------------------------------
 function openAnalysisExamplesModal() {
   show(dom.analysisExamplesModal);
+  requestAnimationFrame(() => {
+    const inner = dom.analysisExamplesModal?.querySelector('.analysis-modal__inner, .modal__inner');
+    if (inner) {
+      inner.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
 }
 
 function closeAnalysisExamplesModal() {
@@ -1199,6 +1215,12 @@ function closeAnalysisExamplesModal() {
 
 function openChatExamplesModal() {
   show(dom.chatExamplesModal);
+  requestAnimationFrame(() => {
+    const inner = dom.chatExamplesModal?.querySelector('.analysis-modal__inner, .modal__inner');
+    if (inner) {
+      inner.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
 }
 
 function closeChatExamplesModal() {
@@ -1260,20 +1282,12 @@ dom.scrollToBottomBtn?.addEventListener('click', () => {
 
 // Keep button in sync with the real scroll surface
 const scrollRoot = getScrollRoot();
-const onScroll = () => {
-  markUserScrolling();
-};
-
 if (scrollRoot === window) {
-  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
 } else {
-  scrollRoot.addEventListener('scroll', onScroll, { passive: true });
+  scrollRoot.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
 }
-
-window.addEventListener('resize', () => {
-  markUserScrolling();
-  scheduleScrollButtonUpdate();
-});
+window.addEventListener('resize', scheduleScrollButtonUpdate);
 
 // Analysis examples
 dom.openAnalysisExamplesBtn?.addEventListener('click', () => {
