@@ -24,7 +24,7 @@
 // - scroll-to-bottom button only appears after an analysis is loaded
 // - scroll-to-bottom button fades in only while the user is scrolling
 // - scroll-to-bottom button fades away shortly after scrolling stops
-// - scroll detection now uses the real scroll container instead of assuming window
+// - intro hero and intro buttons now animate in softly as if generated
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -92,6 +92,7 @@ const dom = {
   // Intro
   introHero: document.getElementById('intro-hero'),
   introActions: document.querySelector('.intro-actions'),
+  introRevealEls: Array.from(document.querySelectorAll('.intro-reveal')),
 
   // App shell / real scroll root candidate
   appShell: document.querySelector('.app-shell'),
@@ -347,12 +348,31 @@ function scrollToPageBottom() {
   }, 350);
 }
 
+function clearIntroRevealState() {
+  if (!dom.introRevealEls?.length) return;
+  dom.introRevealEls.forEach((el) => el.classList.remove('is-generated'));
+}
+
+function playIntroReveal() {
+  if (!dom.introRevealEls?.length) return;
+
+  clearIntroRevealState();
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      dom.introRevealEls.forEach((el) => el.classList.add('is-generated'));
+    });
+  });
+}
+
 function hideIntroActions() {
+  clearIntroRevealState();
   hide(dom.introActions);
 }
 
 function showIntroActions() {
   show(dom.introActions);
+  playIntroReveal();
 }
 
 function setAnalysisSendLoading(isLoading) {
@@ -1359,7 +1379,13 @@ closeChatExamplesModal();
 
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
-showIntroActions();
 
-restoreSession();
+const restored = restoreSession();
+
+if (!restored) {
+  showIntroActions();
+} else {
+  hideIntroActions();
+}
+
 scheduleScrollButtonUpdate();
