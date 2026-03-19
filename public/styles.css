@@ -1527,8 +1527,7 @@ x§
 
 .analysis-status {
   margin-bottom: 22px;
-  margin-left: 50px;
-  margin-right: 50px;
+
 }
 
 .analysis-status p {
@@ -1540,10 +1539,13 @@ x§
 .analysis-report {
   background: var(--white);
   border-radius: 28px;
-  padding: 34px 38px;
+  padding: 60px 70px;
   box-shadow: var(--shadow-bg-drop);
   border: 1px solid rgba(202, 143, 46, 0.55);
   color: var(--black);
+      width: 115%;
+    margin-left: -7.5%;
+    margin-top: 5%;
 }
 
 
