@@ -23,6 +23,7 @@
 //   of that new block to guide reading from the top
 // - scroll-to-bottom button only appears after an analysis is loaded
 // - scroll-to-bottom button disappears again when the user is at the bottom
+// - scroll detection now uses the real scroll container instead of assuming window
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -90,6 +91,9 @@ const dom = {
   // Intro
   introHero: document.getElementById('intro-hero'),
   introActions: document.querySelector('.intro-actions'),
+
+  // App shell / real scroll root candidate
+  appShell: document.querySelector('.app-shell'),
 
   // Scroll CTA
   scrollToBottomBtn: document.getElementById('scroll-to-bottom-btn'),
@@ -192,36 +196,82 @@ function resetTextarea(textarea) {
   textarea.style.overflowY = 'hidden';
 }
 
-function scrollIntoViewCentered(el) {
+function getScrollRoot() {
+  if (!dom.appShell) return window;
+
+  const style = window.getComputedStyle(dom.appShell);
+  const canScrollInY = /(auto|scroll|overlay)/.test(style.overflowY || '');
+  return canScrollInY ? dom.appShell : window;
+}
+
+function getScrollMetrics() {
+  const root = getScrollRoot();
+
+  if (root === window) {
+    const doc = document.documentElement;
+    return {
+      root,
+      scrollTop: window.scrollY || window.pageYOffset || 0,
+      clientHeight: window.innerHeight,
+      scrollHeight: doc.scrollHeight
+    };
+  }
+
+  return {
+    root,
+    scrollTop: root.scrollTop,
+    clientHeight: root.clientHeight,
+    scrollHeight: root.scrollHeight
+  };
+}
+
+function scrollElementIntoViewWithinRoot(el, block = 'center') {
   if (!el) return;
+
   requestAnimationFrame(() => {
-    el.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center'
+    const root = getScrollRoot();
+
+    if (root === window) {
+      el.scrollIntoView({
+        behavior: 'smooth',
+        block
+      });
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+
+    let targetTop = root.scrollTop + (elRect.top - rootRect.top);
+
+    if (block === 'center') {
+      targetTop = targetTop - (root.clientHeight / 2) + (elRect.height / 2);
+    }
+
+    root.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth'
     });
   });
+}
+
+function scrollIntoViewCentered(el) {
+  scrollElementIntoViewWithinRoot(el, 'center');
 }
 
 function scrollMessageToTop(messageEl) {
-  if (!messageEl) return;
-
-  requestAnimationFrame(() => {
-    messageEl.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
-    });
-  });
+  scrollElementIntoViewWithinRoot(messageEl, 'start');
 }
 
 function pageCanScroll() {
-  return document.documentElement.scrollHeight > window.innerHeight + 8;
+  const { scrollHeight, clientHeight } = getScrollMetrics();
+  return scrollHeight > clientHeight + 8;
 }
 
 function isNearBottom(offset = 24) {
-  const scrollTop = window.scrollY || window.pageYOffset || 0;
-  const viewportBottom = scrollTop + window.innerHeight;
-  const fullHeight = document.documentElement.scrollHeight;
-  return viewportBottom >= fullHeight - offset;
+  const { scrollTop, clientHeight, scrollHeight } = getScrollMetrics();
+  const viewportBottom = scrollTop + clientHeight;
+  return viewportBottom >= scrollHeight - offset;
 }
 
 function updateScrollToBottomButton() {
@@ -245,8 +295,18 @@ function scheduleScrollButtonUpdate() {
 }
 
 function scrollToPageBottom() {
-  window.scrollTo({
-    top: document.documentElement.scrollHeight,
+  const { root, scrollHeight } = getScrollMetrics();
+
+  if (root === window) {
+    window.scrollTo({
+      top: scrollHeight,
+      behavior: 'smooth'
+    });
+    return;
+  }
+
+  root.scrollTo({
+    top: scrollHeight,
     behavior: 'smooth'
   });
 }
@@ -1159,8 +1219,13 @@ dom.scrollToBottomBtn?.addEventListener('click', () => {
   scrollToPageBottom();
 });
 
-// Keep button in sync with page geometry
-window.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+// Keep button in sync with the real scroll surface
+const scrollRoot = getScrollRoot();
+if (scrollRoot === window) {
+  window.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+} else {
+  scrollRoot.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+}
 window.addEventListener('resize', scheduleScrollButtonUpdate);
 
 // Analysis examples
