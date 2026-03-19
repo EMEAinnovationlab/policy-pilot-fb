@@ -1309,7 +1309,7 @@ x§
 }
 
 .intro-copy {
-  max-width: 60vw;
+  max-width: 40vw;
   width: 100%;
 }
 
@@ -1496,7 +1496,7 @@ x§
 }
 
 .analysis-frame__inner {
-  width: min(60vw, 100%);
+  width: min(40vw, 100%);
   margin: 0 auto;
   padding: 0;
   background: transparent;
