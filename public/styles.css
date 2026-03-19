@@ -1387,9 +1387,8 @@ x§
   padding: 34px 28px 26px;
   position: relative;
   box-shadow: var(--shadow-bg-drop-suttle);
-      margin-left: 25px;
   margin-right: 25px;
-    margin-left: -50px;
+    margin-left: -75px;
 }
 
 .analysis-modal__tag {
