@@ -1872,10 +1872,8 @@ x§
 .generated-word {
   display: inline-block;
   opacity: 0;
-  transform: translateY(8px);
-  filter: blur(6px);
   will-change: opacity, transform, filter;
-  animation: generatedWordIn 0.45s ease forwards;
+  animation: generatedWordIn 0.25s ease forwards;
 }
 
 .generated-space {
