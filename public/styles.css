@@ -1730,7 +1730,7 @@ x§
 .examples-modal__title {
   margin: 18px 0 12px;
   font-family: var(--font-serif);
-  font-size: 52px;
+  font-size: 32px;
   line-height: 0.95;
   color: var(--black);
   font-weight: 500;
@@ -1757,6 +1757,7 @@ x§
   border-radius: 18px;
   min-height: unset;
   padding: 18px 18px 16px;
+  text-align: left;
 }
 
 /***** Utility *****/
