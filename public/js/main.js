@@ -19,6 +19,8 @@
 //   while an analysis is loading or already active
 // - follow-up chat now works against the generated report
 // - summary button now generates a real summary based on the report
+// - when a new message/block appears, the UI scrolls to the start
+//   of that new block to guide reading from the top
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -195,13 +197,13 @@ function scrollIntoViewCentered(el) {
   });
 }
 
-function scrollFollowupToBottom() {
-  if (!dom.analysisFollowupThread) return;
+function scrollMessageToTop(messageEl) {
+  if (!messageEl) return;
+
   requestAnimationFrame(() => {
-    dom.analysisFollowupThread.scrollTop = dom.analysisFollowupThread.scrollHeight;
-    dom.analysisFollowupThread.lastElementChild?.scrollIntoView({
+    messageEl.scrollIntoView({
       behavior: 'smooth',
-      block: 'end'
+      block: 'start'
     });
   });
 }
@@ -325,7 +327,7 @@ function restoreSession() {
     if (!msg || typeof msg.content !== 'string') continue;
 
     if (msg.role === 'user') {
-      appendFollowupMessage('user', `<p>${escapeHtml(msg.content)}</p>`);
+      appendFollowupMessage('user', `<p>${escapeHtml(msg.content)}</p>`, false);
     } else if (msg.role === 'assistant') {
       appendFollowupMessage(
         'assistant',
@@ -335,7 +337,8 @@ function restoreSession() {
             <span>Policy Pilot</span>
           </div>
           <div>${parseMarkdown(msg.content)}</div>
-        `
+        `,
+        false
       );
     }
   }
@@ -635,6 +638,8 @@ function renderLoading(prompt) {
   setHtml(dom.analysisSources, '');
   hide(dom.summaryBtn);
   hide(dom.chatModal);
+
+  scrollMessageToTop(dom.analysisFrame);
 }
 
 function renderStreamingStart() {
@@ -838,14 +843,18 @@ async function submitAnalysisRequest() {
 // ------------------------------------------------------------
 // Follow-up chat
 // ------------------------------------------------------------
-function appendFollowupMessage(role, html) {
+function appendFollowupMessage(role, html, shouldScroll = true) {
   if (!dom.analysisFollowupThread) return null;
 
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   div.innerHTML = html;
   dom.analysisFollowupThread.appendChild(div);
-  scrollFollowupToBottom();
+
+  if (shouldScroll) {
+    scrollMessageToTop(div);
+  }
+
   return div;
 }
 
@@ -908,7 +917,6 @@ async function submitFollowupQuestion() {
     });
 
     persistSession();
-    scrollFollowupToBottom();
   } catch (err) {
     const message = controller.signal.aborted
       ? 'De follow-up is afgebroken.'
@@ -924,7 +932,6 @@ async function submitFollowupQuestion() {
     });
 
     persistSession();
-    scrollFollowupToBottom();
   } finally {
     appState.analysisAbortController = null;
     setChatSendLoading(false);
@@ -994,7 +1001,6 @@ ${appState.activeAnalysisContent}
     });
 
     persistSession();
-    scrollFollowupToBottom();
   } catch (err) {
     const message = controller.signal.aborted
       ? 'De samenvatting is afgebroken.'
@@ -1010,7 +1016,6 @@ ${appState.activeAnalysisContent}
     });
 
     persistSession();
-    scrollFollowupToBottom();
   } finally {
     appState.analysisAbortController = null;
     setChatSendLoading(false);
