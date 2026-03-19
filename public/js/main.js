@@ -21,6 +21,8 @@
 // - summary button now generates a real summary based on the report
 // - when a new message/block appears, the UI scrolls to the start
 //   of that new block to guide reading from the top
+// - a scroll-to-bottom button appears only when the page can scroll
+//   and the user is not already at the bottom
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -88,6 +90,9 @@ const dom = {
   // Intro
   introHero: document.getElementById('intro-hero'),
   introActions: document.querySelector('.intro-actions'),
+
+  // Scroll CTA
+  scrollToBottomBtn: document.getElementById('scroll-to-bottom-btn'),
 
   // Analysis launcher
   analysisModal: document.getElementById('analysis-modal'),
@@ -205,6 +210,43 @@ function scrollMessageToTop(messageEl) {
       behavior: 'smooth',
       block: 'start'
     });
+  });
+}
+
+function pageCanScroll() {
+  return document.documentElement.scrollHeight > window.innerHeight + 8;
+}
+
+function isNearBottom(offset = 24) {
+  const scrollTop = window.scrollY || window.pageYOffset || 0;
+  const viewportBottom = scrollTop + window.innerHeight;
+  const fullHeight = document.documentElement.scrollHeight;
+  return viewportBottom >= fullHeight - offset;
+}
+
+function updateScrollToBottomButton() {
+  const btn = dom.scrollToBottomBtn;
+  if (!btn) return;
+
+  const shouldShow = pageCanScroll() && !isNearBottom();
+
+  if (shouldShow) {
+    btn.classList.remove('hide');
+  } else {
+    btn.classList.add('hide');
+  }
+}
+
+function scheduleScrollButtonUpdate() {
+  requestAnimationFrame(() => {
+    updateScrollToBottomButton();
+  });
+}
+
+function scrollToPageBottom() {
+  window.scrollTo({
+    top: document.documentElement.scrollHeight,
+    behavior: 'smooth'
   });
 }
 
@@ -343,6 +385,7 @@ function restoreSession() {
     }
   }
 
+  scheduleScrollButtonUpdate();
   return true;
 }
 
@@ -551,14 +594,18 @@ function closeAnalysisModal() {
   } else {
     hideIntroActions();
   }
+
+  scheduleScrollButtonUpdate();
 }
 
 function openChatModal() {
   show(dom.chatModal);
+  scheduleScrollButtonUpdate();
 }
 
 function closeChatModal() {
   hide(dom.chatModal);
+  scheduleScrollButtonUpdate();
 }
 
 // ------------------------------------------------------------
@@ -608,6 +655,8 @@ function hardResetAnalysisState() {
   closeConfirmModal();
   setAnalysisSendLoading(false);
   setChatSendLoading(false);
+
+  updateScrollToBottomButton();
 }
 
 // ------------------------------------------------------------
@@ -640,6 +689,7 @@ function renderLoading(prompt) {
   hide(dom.chatModal);
 
   scrollMessageToTop(dom.analysisFrame);
+  scheduleScrollButtonUpdate();
 }
 
 function renderStreamingStart() {
@@ -650,6 +700,7 @@ function renderStreamingStart() {
     </div>
     <div id="analysis-stream-content"></div>
   `);
+  scheduleScrollButtonUpdate();
 }
 
 function updateAnalysisStream(markdownText) {
@@ -697,6 +748,7 @@ function renderDone(content, sources) {
   show(dom.chatModal);
 
   persistSession();
+  scheduleScrollButtonUpdate();
 }
 
 function renderAnalysisError(message) {
@@ -717,6 +769,8 @@ function renderAnalysisError(message) {
   setHtml(dom.analysisSources, '');
   hide(dom.summaryBtn);
   hide(dom.chatModal);
+
+  scheduleScrollButtonUpdate();
 }
 
 // ------------------------------------------------------------
@@ -733,6 +787,8 @@ async function streamChatToElement({
   if (targetEl) {
     targetEl.innerHTML = loadingHtml;
   }
+
+  scheduleScrollButtonUpdate();
 
   const resp = await fetch('/chat', {
     method: 'POST',
@@ -780,16 +836,19 @@ async function streamChatToElement({
         if (targetEl) {
           targetEl.innerHTML = parseMarkdown(text);
         }
+        scheduleScrollButtonUpdate();
       } else if (evt.type === 'sources') {
         sources = Array.isArray(evt.items) ? evt.items : [];
       } else if (evt.type === 'error') {
         throw new Error(evt.message || 'Unknown stream error');
       } else if (evt.type === 'done') {
+        scheduleScrollButtonUpdate();
         return { text, sources };
       }
     }
   }
 
+  scheduleScrollButtonUpdate();
   return { text, sources };
 }
 
@@ -837,6 +896,7 @@ async function submitAnalysisRequest() {
   } finally {
     appState.analysisAbortController = null;
     setAnalysisSendLoading(false);
+    scheduleScrollButtonUpdate();
   }
 }
 
@@ -855,6 +915,7 @@ function appendFollowupMessage(role, html, shouldScroll = true) {
     scrollMessageToTop(div);
   }
 
+  scheduleScrollButtonUpdate();
   return div;
 }
 
@@ -935,6 +996,7 @@ async function submitFollowupQuestion() {
   } finally {
     appState.analysisAbortController = null;
     setChatSendLoading(false);
+    scheduleScrollButtonUpdate();
   }
 }
 
@@ -1020,6 +1082,7 @@ ${appState.activeAnalysisContent}
     appState.analysisAbortController = null;
     setChatSendLoading(false);
     if (dom.summaryBtn) dom.summaryBtn.disabled = false;
+    scheduleScrollButtonUpdate();
   }
 }
 
@@ -1089,6 +1152,15 @@ dom.closeChatModalBtn?.addEventListener('click', () => {
 
 // Summary button
 dom.summaryBtn?.addEventListener('click', generateSummary);
+
+// Scroll button
+dom.scrollToBottomBtn?.addEventListener('click', () => {
+  scrollToPageBottom();
+});
+
+// Keep button in sync with page geometry
+window.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+window.addEventListener('resize', scheduleScrollButtonUpdate);
 
 // Analysis examples
 dom.openAnalysisExamplesBtn?.addEventListener('click', () => {
@@ -1177,3 +1249,4 @@ resetTextarea(dom.chatInput);
 showIntroActions();
 
 restoreSession();
+scheduleScrollButtonUpdate();

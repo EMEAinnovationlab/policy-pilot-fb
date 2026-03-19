@@ -646,7 +646,7 @@ textarea {
 
 /* ====== Header ====== */
 .site-header {
-  position: absolute; top: 0; z-index: 100000000;
+  position: absolute; top: 0; z-index: 1000;
   background: transparent;
   padding: 10px 16px;
   width: 100vw;
@@ -1306,6 +1306,8 @@ x§
   justify-content: center;
   align-items: flex-start;
   /* min-height: 68vh; */
+    margin-left: 50px;
+  margin-right: 50px;
 }
 
 .intro-copy {
@@ -1507,10 +1509,12 @@ x§
 .analysis-request-pill {
   width: fit-content;
   max-width: 100%;
-  margin: 0 auto 28px;
+  margin: 0 auto 75px;
   background: var(--white);
-  box-shadow: var(--shadow-bg-drop-suttle);
+  box-shadow: var(--shadow-bg-drop);
   border-radius: 999px;
+  border-color: #F8D69D;
+  border-width: 1px;
   padding: 16px 24px;
   color: var(--black);
   font-size: 16px;
@@ -1519,6 +1523,8 @@ x§
 
 .analysis-status {
   margin-bottom: 22px;
+  margin-left: 50px;
+  margin-right: 50px;
 }
 
 .analysis-status p {
