@@ -1376,7 +1376,7 @@ x§
 }
 
 .analysis-modal__inner {
-  width: min(640px, 100%);
+  width: min(45vw, 100%);
   background: var(--white-dark);
   border: 1px solid rgba(202, 143, 46, 0.45);
   border-radius: 28px;
@@ -1388,7 +1388,7 @@ x§
 .analysis-modal__tag {
   position: absolute;
   left: 24px;
-  top: -15px;
+  top: 15px;
   background: var(--Edelman-blue);
   color: var(--white);
   border-radius: 999px;
@@ -1411,7 +1411,7 @@ x§
   margin: 18px 0 12px;
   font-family: var(--font-serif);
   font-weight: 500;
-  /* font-size: clamp(34px, 4vw, 52px); */
+  font-size: 32px;
   line-height: 0.95;
   color: var(--black);
 }
