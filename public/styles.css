@@ -1864,8 +1864,6 @@ x§
 }
 
 
-
-
 .generated-line {
   display: block;
 }
@@ -1874,7 +1872,7 @@ x§
   display: inline-block;
   opacity: 0;
   will-change: opacity;
-  animation: generatedWordIn 0.5s ease forwards;
+  animation: generatedWordIn 0.32s ease forwards;
 }
 
 .generated-space {
@@ -1884,17 +1882,15 @@ x§
 
 .intro-actions {
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.4s ease, transform 0.4s ease;
+  transition: opacity 0.3s ease;
 }
 
 .intro-actions.is-generated {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .intro-actions.is-generated > * {
-  animation: introButtonIn 0.4s ease both;
+  animation: introButtonIn 0.3s ease both;
 }
 
 .intro-actions.is-generated > *:nth-child(1) { animation-delay: 0.05s; }
@@ -1905,25 +1901,30 @@ x§
 @keyframes generatedWordIn {
   from {
     opacity: 0;
-    /* transform: translateY(8px); */
-    /* filter: blur(6px); */
   }
   to {
     opacity: 1;
-    /* transform: translateY(0); */
-    /* filter: blur(0); */
   }
 }
 
 @keyframes introButtonIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
+}
+
+#scroll-to-bottom-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#scroll-to-bottom-btn.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1933,7 +1934,5 @@ x§
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
-    transform: none !important;
-    filter: none !important;
   }
 }
