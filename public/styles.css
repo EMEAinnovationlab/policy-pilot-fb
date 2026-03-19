@@ -1839,6 +1839,13 @@ x§
   line-height: 1;
 }
 
+
+
+
+
+
+
+
 @media (max-width: 640px) {
   .scroll-to-bottom-btn {
     bottom: 20px;
@@ -1862,6 +1869,15 @@ x§
   opacity: 1;
   pointer-events: auto;
 }
+
+
+
+
+
+
+
+
+
 
 
 .generated-line {
