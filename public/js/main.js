@@ -21,8 +21,8 @@
 // - summary button now generates a real summary based on the report
 // - when a new message/block appears, the UI scrolls to the start
 //   of that new block to guide reading from the top
-// - a scroll-to-bottom button appears only when the page can scroll
-//   and the user is not already at the bottom
+// - scroll-to-bottom button only appears after an analysis is loaded
+// - scroll-to-bottom button disappears again when the user is at the bottom
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -229,7 +229,7 @@ function updateScrollToBottomButton() {
   if (!btn) return;
 
   const analysisIsReady = appState.phase === 'analysis-loaded';
-  const shouldShow = analysisIsReady && !isNearBottom();
+  const shouldShow = analysisIsReady && pageCanScroll() && !isNearBottom();
 
   if (shouldShow) {
     btn.classList.remove('hide');
@@ -1237,7 +1237,7 @@ window.addEventListener('keydown', (e) => {
 // Initial state
 // ------------------------------------------------------------
 hide(dom.analysisModal);
-hide(dom.analysisFrame)
+hide(dom.analysisFrame);
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
