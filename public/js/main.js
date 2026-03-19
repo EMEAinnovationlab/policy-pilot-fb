@@ -24,7 +24,7 @@
 // - scroll-to-bottom button only appears after an analysis is loaded
 // - scroll-to-bottom button fades in only while the user is scrolling
 // - scroll-to-bottom button fades away shortly after scrolling stops
-// - intro hero and intro buttons now animate in softly as if generated
+// - intro text now appears word by word as if it is being generated
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -52,6 +52,13 @@ const STRAPLINE = {
 };
 
 let SUMMARY_PROMPT = '';
+
+// Word generation tuning
+const INTRO_GENERATION = {
+  startDelay: 0.05,
+  wordStep: 0.045,
+  linePause: 0.10
+};
 
 async function loadProjectPromptsFromServer() {
   try {
@@ -92,7 +99,6 @@ const dom = {
   // Intro
   introHero: document.getElementById('intro-hero'),
   introActions: document.querySelector('.intro-actions'),
-  introRevealEls: Array.from(document.querySelectorAll('.intro-reveal')),
 
   // App shell / real scroll root candidate
   appShell: document.querySelector('.app-shell'),
@@ -155,7 +161,8 @@ const appState = {
   followupHistory: [],
   analysisAbortController: null,
   scrollFadeTimer: null,
-  isUserScrolling: false
+  isUserScrolling: false,
+  introGenerationTimer: null
 };
 
 // ------------------------------------------------------------
@@ -348,31 +355,84 @@ function scrollToPageBottom() {
   }, 350);
 }
 
-function clearIntroRevealState() {
-  if (!dom.introRevealEls?.length) return;
-  dom.introRevealEls.forEach((el) => el.classList.remove('is-generated'));
+function clearIntroGenerationTimer() {
+  if (!appState.introGenerationTimer) return;
+  clearTimeout(appState.introGenerationTimer);
+  appState.introGenerationTimer = null;
 }
 
-function playIntroReveal() {
-  if (!dom.introRevealEls?.length) return;
+function splitTextToAnimatedWords(el, startDelay = 0, step = 0.045) {
+  if (!el) return startDelay;
 
-  clearIntroRevealState();
+  const original = el.dataset.originalText || el.textContent || '';
+  el.dataset.originalText = original;
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      dom.introRevealEls.forEach((el) => el.classList.add('is-generated'));
-    });
+  const words = original.trim().split(/\s+/).filter(Boolean);
+  el.innerHTML = '';
+  el.classList.add('generated-line');
+
+  let delay = startDelay;
+
+  words.forEach((word, index) => {
+    const wordSpan = document.createElement('span');
+    wordSpan.className = 'generated-word';
+    wordSpan.textContent = word;
+    wordSpan.style.animationDelay = `${delay}s`;
+    el.appendChild(wordSpan);
+
+    if (index < words.length - 1) {
+      const space = document.createElement('span');
+      space.className = 'generated-space';
+      space.innerHTML = '&nbsp;';
+      el.appendChild(space);
+    }
+
+    delay += step;
   });
+
+  return delay;
+}
+
+function resetGeneratedIntroText() {
+  const els = document.querySelectorAll('[data-generate]');
+
+  els.forEach((el) => {
+    const original = el.dataset.originalText || el.textContent || '';
+    el.dataset.originalText = original;
+    el.textContent = original;
+    el.classList.remove('generated-line');
+  });
+
+  dom.introActions?.classList.remove('is-generated');
+  clearIntroGenerationTimer();
+}
+
+function playGeneratedIntro() {
+  const els = Array.from(document.querySelectorAll('[data-generate]'));
+  if (!els.length) return;
+
+  resetGeneratedIntroText();
+
+  let delay = INTRO_GENERATION.startDelay;
+
+  els.forEach((el) => {
+    delay = splitTextToAnimatedWords(el, delay, INTRO_GENERATION.wordStep);
+    delay += INTRO_GENERATION.linePause;
+  });
+
+  appState.introGenerationTimer = setTimeout(() => {
+    dom.introActions?.classList.add('is-generated');
+  }, delay * 1000);
 }
 
 function hideIntroActions() {
-  clearIntroRevealState();
+  resetGeneratedIntroText();
   hide(dom.introActions);
 }
 
 function showIntroActions() {
   show(dom.introActions);
-  playIntroReveal();
+  playGeneratedIntro();
 }
 
 function setAnalysisSendLoading(isLoading) {
@@ -744,6 +804,7 @@ function hardResetAnalysisState() {
 
   clearScrollFadeTimer();
   appState.isUserScrolling = false;
+  clearIntroGenerationTimer();
 
   showIntroActions();
 

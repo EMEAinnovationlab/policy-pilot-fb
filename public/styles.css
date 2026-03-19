@@ -1863,57 +1863,51 @@ x§
 }
 
 
-/* -----------------------------------
-   Intro soft entrance
------------------------------------ */
 
-.intro-reveal {
+
+.generated-line {
+  display: block;
+}
+
+.generated-word {
+  display: inline-block;
   opacity: 0;
-  transform: translateY(14px) scale(0.995);
+  transform: translateY(8px);
   filter: blur(6px);
-  transition:
-    opacity 0.7s ease,
-    transform 0.7s ease,
-    filter 0.7s ease;
   will-change: opacity, transform, filter;
+  animation: generatedWordIn 0.45s ease forwards;
 }
 
-.intro-reveal.is-generated {
+.generated-space {
+  display: inline-block;
+  width: 0.32em;
+}
+
+.intro-actions {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.intro-actions.is-generated {
   opacity: 1;
-  transform: translateY(0) scale(1);
-  filter: blur(0);
+  transform: translateY(0);
 }
 
-.intro-reveal--delayed {
-  transition-delay: 0.18s;
-}
-
-/* Optional: slightly softer button child reveal */
 .intro-actions.is-generated > * {
-  animation: introButtonRise 0.55s ease both;
+  animation: introButtonIn 0.4s ease both;
 }
 
-.intro-actions.is-generated > *:nth-child(1) {
-  animation-delay: 0.10s;
-}
+.intro-actions.is-generated > *:nth-child(1) { animation-delay: 0.05s; }
+.intro-actions.is-generated > *:nth-child(2) { animation-delay: 0.12s; }
+.intro-actions.is-generated > *:nth-child(3) { animation-delay: 0.19s; }
+.intro-actions.is-generated > *:nth-child(4) { animation-delay: 0.26s; }
 
-.intro-actions.is-generated > *:nth-child(2) {
-  animation-delay: 0.18s;
-}
-
-.intro-actions.is-generated > *:nth-child(3) {
-  animation-delay: 0.26s;
-}
-
-.intro-actions.is-generated > *:nth-child(4) {
-  animation-delay: 0.34s;
-}
-
-@keyframes introButtonRise {
+@keyframes generatedWordIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
-    filter: blur(4px);
+    transform: translateY(8px);
+    filter: blur(6px);
   }
   to {
     opacity: 1;
@@ -1922,20 +1916,25 @@ x§
   }
 }
 
-/* Respect reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .intro-reveal,
-  .intro-reveal.is-generated,
-  .intro-actions.is-generated > * {
-    transition: none;
-    animation: none;
+@keyframes introButtonIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
     opacity: 1;
-    transform: none;
-    filter: none;
+    transform: translateY(0);
   }
 }
 
-
-
-
-
+@media (prefers-reduced-motion: reduce) {
+  .generated-word,
+  .intro-actions,
+  .intro-actions.is-generated > * {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
