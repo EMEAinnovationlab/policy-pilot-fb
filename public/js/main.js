@@ -25,6 +25,8 @@
 // - scroll-to-bottom button fades in only while the user is scrolling
 // - scroll-to-bottom button fades away shortly after scrolling stops
 // - intro text now appears word by word as if it is being generated
+// - intro generation is one-time per browser tab session
+// - intro generation does not interfere with 5-minute analysis restore
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -53,12 +55,13 @@ const STRAPLINE = {
 
 let SUMMARY_PROMPT = '';
 
-// Word generation tuning
 const INTRO_GENERATION = {
   startDelay: 0.05,
   wordStep: 0.045,
   linePause: 0.10
 };
+
+const INTRO_ANIMATION_SESSION_KEY = 'policyPilotIntroAnimated';
 
 async function loadProjectPromptsFromServer() {
   try {
@@ -205,6 +208,20 @@ function resetTextarea(textarea) {
   textarea.value = '';
   textarea.style.height = '56px';
   textarea.style.overflowY = 'hidden';
+}
+
+function hasPlayedIntroAnimationThisSession() {
+  try {
+    return sessionStorage.getItem(INTRO_ANIMATION_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markIntroAnimationPlayedThisSession() {
+  try {
+    sessionStorage.setItem(INTRO_ANIMATION_SESSION_KEY, '1');
+  } catch {}
 }
 
 function getScrollRoot() {
@@ -430,9 +447,17 @@ function hideIntroActions() {
   hide(dom.introActions);
 }
 
-function showIntroActions() {
+function showIntroActions({ animate = true } = {}) {
   show(dom.introActions);
-  playGeneratedIntro();
+
+  if (animate && !hasPlayedIntroAnimationThisSession()) {
+    playGeneratedIntro();
+    markIntroAnimationPlayedThisSession();
+    return;
+  }
+
+  resetGeneratedIntroText();
+  dom.introActions?.classList.add('is-generated');
 }
 
 function setAnalysisSendLoading(isLoading) {
@@ -767,7 +792,7 @@ function closeAnalysisModal() {
   }
 
   if (!hasStartedAnalysisSession()) {
-    showIntroActions();
+    showIntroActions({ animate: false });
   } else {
     hideIntroActions();
   }
@@ -806,7 +831,7 @@ function hardResetAnalysisState() {
   appState.isUserScrolling = false;
   clearIntroGenerationTimer();
 
-  showIntroActions();
+  showIntroActions({ animate: false });
 
   resetTextarea(dom.analysisInput);
   resetTextarea(dom.chatInput);
@@ -1444,7 +1469,7 @@ resetTextarea(dom.chatInput);
 const restored = restoreSession();
 
 if (!restored) {
-  showIntroActions();
+  showIntroActions({ animate: !hasPlayedIntroAnimationThisSession() });
 } else {
   hideIntroActions();
 }
