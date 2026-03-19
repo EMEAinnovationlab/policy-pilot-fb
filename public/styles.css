@@ -1284,7 +1284,7 @@ x§
 
 .page-surface {
   width: 80vw;
-  min-height: 96vh;
+  min-height: 50vh;
   margin: 0 auto;
   /* background: var(--white); */
   /* box-shadow: var(--shadow-bg-drop-suttle); */
