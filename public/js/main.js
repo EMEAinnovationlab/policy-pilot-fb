@@ -784,10 +784,11 @@ function appendFollowupMessage(role, html) {
   dom.analysisFollowupThread.appendChild(div);
 }
 
-function submitFollowupQuestion() {
+async function submitFollowupQuestion() {
   const prompt = (dom.chatInput?.value || '').trim();
   if (!prompt) return;
   if (!appState.activeAnalysisContent) return;
+  if (appState.analysisAbortController) return;
 
   appendFollowupMessage('user', `<p>${escapeHtml(prompt)}</p>`);
   resetTextarea(dom.chatInput);
@@ -797,23 +798,114 @@ function submitFollowupQuestion() {
     content: prompt
   });
 
-  appendFollowupMessage(
-    'assistant',
-    `
-      <div class="eyebrow">
-        <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-        <span>Policy Pilot</span>
-      </div>
-      <p>De follow-up chat wordt in de volgende stap gekoppeld aan de analysecontext.</p>
-    `
-  );
+  const assistantDiv = document.createElement('div');
+  assistantDiv.className = 'msg assistant';
+  assistantDiv.innerHTML = `
+    <div class="eyebrow">
+      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
+      <span>Policy Pilot</span>
+    </div>
+    <div class="followup-stream-content"><p>Bezig met antwoorden...</p></div>
+  `;
+  dom.analysisFollowupThread?.appendChild(assistantDiv);
 
-  appState.followupHistory.push({
-    role: 'assistant',
-    content: 'De follow-up chat wordt in de volgende stap gekoppeld aan de analysecontext.'
-  });
+  const streamEl = assistantDiv.querySelector('.followup-stream-content');
 
-  persistSession();
+  const controller = new AbortController();
+  appState.analysisAbortController = controller;
+
+  try {
+    const history = [
+      {
+        role: 'user',
+        content: appState.activeAnalysisPrompt
+      },
+      {
+        role: 'assistant',
+        content: appState.activeAnalysisContent
+      },
+      ...appState.followupHistory.slice(0, -1)
+    ];
+
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: prompt,
+        useRetrieval: false,
+        history
+      }),
+      signal: controller.signal
+    });
+
+    if (!resp.ok || !resp.body) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || 'Failed to connect to /chat');
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    let buffer = '';
+    let text = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+
+        const payload = trimmed.slice(5).trim();
+        if (!payload) continue;
+
+        const evt = JSON.parse(payload);
+
+        if (evt.type === 'token') {
+          text += evt.text || '';
+          if (streamEl) {
+            streamEl.innerHTML = parseMarkdown(text);
+          }
+        } else if (evt.type === 'error') {
+          throw new Error(evt.message || 'Unknown follow-up error');
+        } else if (evt.type === 'done') {
+          appState.followupHistory.push({
+            role: 'assistant',
+            content: text
+          });
+          persistSession();
+          return;
+        }
+      }
+    }
+
+    appState.followupHistory.push({
+      role: 'assistant',
+      content: text
+    });
+    persistSession();
+  } catch (err) {
+    const message = controller.signal.aborted
+      ? 'De follow-up is afgebroken.'
+      : (err?.message || 'Server error tijdens follow-up.');
+
+    if (streamEl) {
+      streamEl.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    }
+
+    appState.followupHistory.push({
+      role: 'assistant',
+      content: message
+    });
+    persistSession();
+  } finally {
+    appState.analysisAbortController = null;
+  }
 }
 
 // ------------------------------------------------------------
