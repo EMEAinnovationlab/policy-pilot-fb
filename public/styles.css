@@ -1287,7 +1287,7 @@ x§
   min-height: 96vh;
   margin: 0 auto;
   /* background: var(--white); */
-  box-shadow: var(--shadow-bg-drop-suttle);
+  /* box-shadow: var(--shadow-bg-drop-suttle); */
   border-radius: 12px;
   padding: 110px 70px 60px;
   position: relative;

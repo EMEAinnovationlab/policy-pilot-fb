@@ -15,6 +15,8 @@
 // - intro action buttons now disappear when the analysis modal opens
 // - if the user closes the analysis modal without an active analysis,
 //   the intro action buttons come back
+// - intro action buttons no longer reappear after pressing send
+//   while an analysis is loading or already active
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -217,6 +219,16 @@ function setAnalysisSendLoading(isLoading) {
       dom.analysisInput.removeAttribute('aria-busy');
     }
   }
+}
+
+function hasStartedAnalysisSession() {
+  return !!(
+    appState.phase === 'analysis-loading' ||
+    appState.phase === 'analysis-loaded' ||
+    appState.activeAnalysisPrompt ||
+    appState.activeAnalysisContent ||
+    (Array.isArray(appState.followupHistory) && appState.followupHistory.length > 0)
+  );
 }
 
 // ------------------------------------------------------------
@@ -498,8 +510,10 @@ function closeAnalysisModal() {
     appState.phase = appState.activeAnalysisContent ? 'analysis-loaded' : 'idle';
   }
 
-  if (!appState.activeAnalysisContent) {
+  if (!hasStartedAnalysisSession()) {
     showIntroActions();
+  } else {
+    hideIntroActions();
   }
 }
 
