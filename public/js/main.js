@@ -12,11 +12,13 @@
 // - chat-with-analysis inside the analysis box
 //
 // Updated:
-// - intro action buttons now disappear when the analysis modal opens
+// - intro action buttons disappear when the analysis modal opens
 // - if the user closes the analysis modal without an active analysis,
 //   the intro action buttons come back
 // - intro action buttons no longer reappear after pressing send
 //   while an analysis is loading or already active
+// - follow-up chat now works against the generated report
+// - summary button now generates a real summary based on the report
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -193,6 +195,17 @@ function scrollIntoViewCentered(el) {
   });
 }
 
+function scrollFollowupToBottom() {
+  if (!dom.analysisFollowupThread) return;
+  requestAnimationFrame(() => {
+    dom.analysisFollowupThread.scrollTop = dom.analysisFollowupThread.scrollHeight;
+    dom.analysisFollowupThread.lastElementChild?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'end'
+    });
+  });
+}
+
 function hideIntroActions() {
   hide(dom.introActions);
 }
@@ -217,6 +230,26 @@ function setAnalysisSendLoading(isLoading) {
     if (dom.analysisInput) {
       dom.analysisInput.disabled = false;
       dom.analysisInput.removeAttribute('aria-busy');
+    }
+  }
+}
+
+function setChatSendLoading(isLoading) {
+  if (!dom.chatSend) return;
+
+  dom.chatSend.disabled = isLoading;
+
+  if (isLoading) {
+    dom.chatSend.dataset.loading = '1';
+    if (dom.chatInput) {
+      dom.chatInput.disabled = true;
+      dom.chatInput.setAttribute('aria-busy', 'true');
+    }
+  } else {
+    delete dom.chatSend.dataset.loading;
+    if (dom.chatInput) {
+      dom.chatInput.disabled = false;
+      dom.chatInput.removeAttribute('aria-busy');
     }
   }
 }
@@ -301,7 +334,7 @@ function restoreSession() {
             <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
             <span>Policy Pilot</span>
           </div>
-          <p>${escapeHtml(msg.content)}</p>
+          <div>${parseMarkdown(msg.content)}</div>
         `
       );
     }
@@ -571,6 +604,7 @@ function hardResetAnalysisState() {
   closeChatExamplesModal();
   closeConfirmModal();
   setAnalysisSendLoading(false);
+  setChatSendLoading(false);
 }
 
 // ------------------------------------------------------------
@@ -681,6 +715,80 @@ function renderAnalysisError(message) {
 }
 
 // ------------------------------------------------------------
+// Stream helper
+// ------------------------------------------------------------
+async function streamChatToElement({
+  message,
+  history = [],
+  useRetrieval = false,
+  targetEl,
+  loadingHtml = '<p>Bezig met antwoorden...</p>',
+  abortController
+}) {
+  if (targetEl) {
+    targetEl.innerHTML = loadingHtml;
+  }
+
+  const resp = await fetch('/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      useRetrieval,
+      history
+    }),
+    signal: abortController?.signal
+  });
+
+  if (!resp.ok || !resp.body) {
+    const txt = await resp.text().catch(() => '');
+    throw new Error(txt || 'Failed to connect to /chat');
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+
+  let buffer = '';
+  let text = '';
+  let sources = [];
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+
+      const payload = trimmed.slice(5).trim();
+      if (!payload) continue;
+
+      const evt = JSON.parse(payload);
+
+      if (evt.type === 'token') {
+        text += evt.text || '';
+        if (targetEl) {
+          targetEl.innerHTML = parseMarkdown(text);
+        }
+      } else if (evt.type === 'sources') {
+        sources = Array.isArray(evt.items) ? evt.items : [];
+      } else if (evt.type === 'error') {
+        throw new Error(evt.message || 'Unknown stream error');
+      } else if (evt.type === 'done') {
+        return { text, sources };
+      }
+    }
+  }
+
+  return { text, sources };
+}
+
+// ------------------------------------------------------------
 // First request = real RAG analysis
 // ------------------------------------------------------------
 async function submitAnalysisRequest() {
@@ -702,62 +810,17 @@ async function submitAnalysisRequest() {
   appState.analysisAbortController = controller;
 
   try {
-    const resp = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: prompt,
-        useRetrieval: true,
-        history: []
-      }),
-      signal: controller.signal
-    });
-
-    if (!resp.ok || !resp.body) {
-      const txt = await resp.text().catch(() => '');
-      throw new Error(txt || 'Failed to connect to /chat');
-    }
-
     renderStreamingStart();
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-
-    let buffer = '';
-    let text = '';
-    let sources = [];
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-
-        const payload = trimmed.slice(5).trim();
-        if (!payload) continue;
-
-        const evt = JSON.parse(payload);
-
-        if (evt.type === 'token') {
-          text += evt.text || '';
-          updateAnalysisStream(text);
-        } else if (evt.type === 'sources') {
-          sources = Array.isArray(evt.items) ? evt.items : [];
-        } else if (evt.type === 'error') {
-          throw new Error(evt.message || 'Unknown analysis error');
-        } else if (evt.type === 'done') {
-          renderDone(text, sources);
-          return;
-        }
-      }
-    }
+    const streamEl = document.getElementById('analysis-stream-content');
+    const { text, sources } = await streamChatToElement({
+      message: prompt,
+      history: [],
+      useRetrieval: true,
+      targetEl: streamEl,
+      loadingHtml: '',
+      abortController: controller
+    });
 
     renderDone(text, sources);
   } catch (err) {
@@ -773,15 +836,17 @@ async function submitAnalysisRequest() {
 }
 
 // ------------------------------------------------------------
-// Follow-up chat placeholder
+// Follow-up chat
 // ------------------------------------------------------------
 function appendFollowupMessage(role, html) {
-  if (!dom.analysisFollowupThread) return;
+  if (!dom.analysisFollowupThread) return null;
 
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   div.innerHTML = html;
   dom.analysisFollowupThread.appendChild(div);
+  scrollFollowupToBottom();
+  return div;
 }
 
 async function submitFollowupQuestion() {
@@ -798,21 +863,22 @@ async function submitFollowupQuestion() {
     content: prompt
   });
 
-  const assistantDiv = document.createElement('div');
-  assistantDiv.className = 'msg assistant';
-  assistantDiv.innerHTML = `
-    <div class="eyebrow">
-      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-      <span>Policy Pilot</span>
-    </div>
-    <div class="followup-stream-content"><p>Bezig met antwoorden...</p></div>
-  `;
-  dom.analysisFollowupThread?.appendChild(assistantDiv);
+  const assistantDiv = appendFollowupMessage(
+    'assistant',
+    `
+      <div class="eyebrow">
+        <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
+        <span>Policy Pilot</span>
+      </div>
+      <div class="followup-stream-content"><p>Bezig met antwoorden...</p></div>
+    `
+  );
 
-  const streamEl = assistantDiv.querySelector('.followup-stream-content');
+  const streamEl = assistantDiv?.querySelector('.followup-stream-content');
 
   const controller = new AbortController();
   appState.analysisAbortController = controller;
+  setChatSendLoading(true);
 
   try {
     const history = [
@@ -827,68 +893,22 @@ async function submitFollowupQuestion() {
       ...appState.followupHistory.slice(0, -1)
     ];
 
-    const resp = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: prompt,
-        useRetrieval: false,
-        history
-      }),
-      signal: controller.signal
+    const { text } = await streamChatToElement({
+      message: prompt,
+      history,
+      useRetrieval: false,
+      targetEl: streamEl,
+      loadingHtml: '<p>Bezig met antwoorden...</p>',
+      abortController: controller
     });
-
-    if (!resp.ok || !resp.body) {
-      const txt = await resp.text().catch(() => '');
-      throw new Error(txt || 'Failed to connect to /chat');
-    }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-
-    let buffer = '';
-    let text = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-
-        const payload = trimmed.slice(5).trim();
-        if (!payload) continue;
-
-        const evt = JSON.parse(payload);
-
-        if (evt.type === 'token') {
-          text += evt.text || '';
-          if (streamEl) {
-            streamEl.innerHTML = parseMarkdown(text);
-          }
-        } else if (evt.type === 'error') {
-          throw new Error(evt.message || 'Unknown follow-up error');
-        } else if (evt.type === 'done') {
-          appState.followupHistory.push({
-            role: 'assistant',
-            content: text
-          });
-          persistSession();
-          return;
-        }
-      }
-    }
 
     appState.followupHistory.push({
       role: 'assistant',
       content: text
     });
+
     persistSession();
+    scrollFollowupToBottom();
   } catch (err) {
     const message = controller.signal.aborted
       ? 'De follow-up is afgebroken.'
@@ -902,9 +922,99 @@ async function submitFollowupQuestion() {
       role: 'assistant',
       content: message
     });
+
     persistSession();
+    scrollFollowupToBottom();
   } finally {
     appState.analysisAbortController = null;
+    setChatSendLoading(false);
+  }
+}
+
+// ------------------------------------------------------------
+// Summary
+// ------------------------------------------------------------
+async function generateSummary() {
+  if (!appState.activeAnalysisContent) return;
+  if (appState.analysisAbortController) return;
+
+  const summaryInstruction = (SUMMARY_PROMPT || '').trim() || `
+Maak een heldere samenvatting van onderstaande analyse.
+Geef:
+1. de hoofdconclusie
+2. de 3 belangrijkste inzichten
+3. de strategische relevantie in gewone taal
+Houd het compact en concreet.
+  `.trim();
+
+  const sourcePrompt = appState.activeAnalysisPrompt?.trim()
+    ? `Originele analysevraag:\n${appState.activeAnalysisPrompt.trim()}`
+    : '';
+
+  const reportText = `
+Analyse om samen te vatten:
+${appState.activeAnalysisContent}
+  `.trim();
+
+  const payload = [summaryInstruction, sourcePrompt, reportText]
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+
+  const assistantDiv = appendFollowupMessage(
+    'assistant',
+    `
+      <div class="eyebrow">
+        <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
+        <span>Samenvatting</span>
+      </div>
+      <div class="followup-stream-content"><p>Samenvatting wordt gemaakt...</p></div>
+    `
+  );
+
+  const streamEl = assistantDiv?.querySelector('.followup-stream-content');
+
+  const controller = new AbortController();
+  appState.analysisAbortController = controller;
+  setChatSendLoading(true);
+  if (dom.summaryBtn) dom.summaryBtn.disabled = true;
+
+  try {
+    const { text } = await streamChatToElement({
+      message: payload,
+      history: [],
+      useRetrieval: false,
+      targetEl: streamEl,
+      loadingHtml: '<p>Samenvatting wordt gemaakt...</p>',
+      abortController: controller
+    });
+
+    appState.followupHistory.push({
+      role: 'assistant',
+      content: text
+    });
+
+    persistSession();
+    scrollFollowupToBottom();
+  } catch (err) {
+    const message = controller.signal.aborted
+      ? 'De samenvatting is afgebroken.'
+      : (err?.message || 'Server error tijdens samenvatting.');
+
+    if (streamEl) {
+      streamEl.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    }
+
+    appState.followupHistory.push({
+      role: 'assistant',
+      content: message
+    });
+
+    persistSession();
+    scrollFollowupToBottom();
+  } finally {
+    appState.analysisAbortController = null;
+    setChatSendLoading(false);
+    if (dom.summaryBtn) dom.summaryBtn.disabled = false;
   }
 }
 
@@ -972,26 +1082,8 @@ dom.closeChatModalBtn?.addEventListener('click', () => {
   closeChatModal();
 });
 
-// Summary button placeholder
-dom.summaryBtn?.addEventListener('click', () => {
-  appendFollowupMessage(
-    'assistant',
-    `
-      <div class="eyebrow">
-        <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-        <span>Samenvatting</span>
-      </div>
-      <p>De samenvattingsfunctie koppelen we hierna aan de echte analyse-output.</p>
-    `
-  );
-
-  appState.followupHistory.push({
-    role: 'assistant',
-    content: 'De samenvattingsfunctie koppelen we hierna aan de echte analyse-output.'
-  });
-
-  persistSession();
-});
+// Summary button
+dom.summaryBtn?.addEventListener('click', generateSummary);
 
 // Analysis examples
 dom.openAnalysisExamplesBtn?.addEventListener('click', () => {
