@@ -1872,8 +1872,8 @@ x§
 .generated-word {
   display: inline-block;
   opacity: 0;
-  will-change: opacity, transform, filter;
-  animation: generatedWordIn 0.25s ease forwards;
+  will-change: opacity;
+  animation: generatedWordIn 0.5s ease forwards;
 }
 
 .generated-space {
