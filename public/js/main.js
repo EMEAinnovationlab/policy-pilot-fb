@@ -228,7 +228,8 @@ function updateScrollToBottomButton() {
   const btn = dom.scrollToBottomBtn;
   if (!btn) return;
 
-  const shouldShow = pageCanScroll() && !isNearBottom();
+  const analysisIsReady = appState.phase === 'analysis-loaded';
+  const shouldShow = analysisIsReady && !isNearBottom();
 
   if (shouldShow) {
     btn.classList.remove('hide');
