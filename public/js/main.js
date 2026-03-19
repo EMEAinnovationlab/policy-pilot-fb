@@ -775,11 +775,18 @@ function openAnalysisModal({ reset = false } = {}) {
 
   hideIntroActions();
   show(dom.analysisModal);
+
+  // reset animation state
+  dom.analysisModal.classList.remove('is-visible');
+
   appState.phase = 'analysis-modal-open';
 
   scrollIntoViewCentered(dom.analysisModal);
 
   requestAnimationFrame(() => {
+    // trigger animation
+    dom.analysisModal.classList.add('is-visible');
+
     dom.analysisInput?.focus();
   });
 }

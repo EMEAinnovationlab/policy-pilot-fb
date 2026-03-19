@@ -1937,3 +1937,24 @@ x§
     filter: none !important;
   }
 }
+
+
+
+
+/* -----------------------------------
+   Analysis modal inner fade-in
+----------------------------------- */
+
+.analysis-modal__inner {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.analysis-modal.is-visible .analysis-modal__inner {
+  opacity: 1;
+}
+
+/* Optional: slightly faster feel on close */
+.analysis-modal:not(.is-visible) .analysis-modal__inner {
+  opacity: 0;
+}
