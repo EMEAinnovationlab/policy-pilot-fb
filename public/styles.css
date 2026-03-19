@@ -1756,3 +1756,90 @@ x§
 .hide {
   display: none !important;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+.scroll-to-bottom-btn {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 1200;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid #cfa55a;
+  border-radius: 14px;
+
+  background: #a9781f;
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: #946a1b;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.scroll-to-bottom-btn:focus-visible {
+  outline: 2px solid #2f6fed;
+  outline-offset: 3px;
+}
+
+.scroll-to-bottom-btn.hide {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(10px);
+}
+
+.scroll-to-bottom-btn .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .scroll-to-bottom-btn {
+    bottom: 20px;
+    min-height: 48px;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+
+  .scroll-to-bottom-btn .icon {
+    font-size: 20px;
+  }
+}
