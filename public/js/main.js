@@ -22,7 +22,8 @@
 // - when a new message/block appears, the UI scrolls to the start
 //   of that new block to guide reading from the top
 // - scroll-to-bottom button only appears after an analysis is loaded
-// - scroll-to-bottom button disappears again when the user is at the bottom
+// - scroll-to-bottom button fades in only while the user is scrolling
+// - scroll-to-bottom button fades away shortly after scrolling stops
 // - scroll detection now uses the real scroll container instead of assuming window
 // ------------------------------------------------------------
 
@@ -151,7 +152,9 @@ const appState = {
   activeAnalysisContent: '',
   activeAnalysisSources: [],
   followupHistory: [],
-  analysisAbortController: null
+  analysisAbortController: null,
+  scrollFadeTimer: null,
+  isUserScrolling: false
 };
 
 // ------------------------------------------------------------
@@ -279,12 +282,21 @@ function updateScrollToBottomButton() {
   if (!btn) return;
 
   const analysisIsReady = appState.phase === 'analysis-loaded';
-  const shouldShow = analysisIsReady && pageCanScroll() && !isNearBottom();
+  const shouldExist = analysisIsReady && pageCanScroll() && !isNearBottom();
+  const shouldBeVisible = shouldExist && appState.isUserScrolling;
 
-  if (shouldShow) {
-    btn.classList.remove('hide');
-  } else {
+  if (!shouldExist) {
     btn.classList.add('hide');
+    btn.classList.remove('is-visible');
+    return;
+  }
+
+  btn.classList.remove('hide');
+
+  if (shouldBeVisible) {
+    btn.classList.add('is-visible');
+  } else {
+    btn.classList.remove('is-visible');
   }
 }
 
@@ -294,21 +306,45 @@ function scheduleScrollButtonUpdate() {
   });
 }
 
+function clearScrollFadeTimer() {
+  if (!appState.scrollFadeTimer) return;
+  clearTimeout(appState.scrollFadeTimer);
+  appState.scrollFadeTimer = null;
+}
+
+function markUserScrolling() {
+  appState.isUserScrolling = true;
+  updateScrollToBottomButton();
+
+  clearScrollFadeTimer();
+
+  appState.scrollFadeTimer = setTimeout(() => {
+    appState.isUserScrolling = false;
+    updateScrollToBottomButton();
+  }, 700);
+}
+
 function scrollToPageBottom() {
   const { root, scrollHeight } = getScrollMetrics();
+
+  appState.isUserScrolling = false;
+  clearScrollFadeTimer();
 
   if (root === window) {
     window.scrollTo({
       top: scrollHeight,
       behavior: 'smooth'
     });
-    return;
+  } else {
+    root.scrollTo({
+      top: scrollHeight,
+      behavior: 'smooth'
+    });
   }
 
-  root.scrollTo({
-    top: scrollHeight,
-    behavior: 'smooth'
-  });
+  setTimeout(() => {
+    updateScrollToBottomButton();
+  }, 350);
 }
 
 function hideIntroActions() {
@@ -685,6 +721,9 @@ function hardResetAnalysisState() {
   appState.activeAnalysisSources = [];
   appState.followupHistory = [];
   appState.analysisAbortController = null;
+
+  clearScrollFadeTimer();
+  appState.isUserScrolling = false;
 
   showIntroActions();
 
@@ -1221,12 +1260,20 @@ dom.scrollToBottomBtn?.addEventListener('click', () => {
 
 // Keep button in sync with the real scroll surface
 const scrollRoot = getScrollRoot();
+const onScroll = () => {
+  markUserScrolling();
+};
+
 if (scrollRoot === window) {
-  window.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+  window.addEventListener('scroll', onScroll, { passive: true });
 } else {
-  scrollRoot.addEventListener('scroll', updateScrollToBottomButton, { passive: true });
+  scrollRoot.addEventListener('scroll', onScroll, { passive: true });
 }
-window.addEventListener('resize', scheduleScrollButtonUpdate);
+
+window.addEventListener('resize', () => {
+  markUserScrolling();
+  scheduleScrollButtonUpdate();
+});
 
 // Analysis examples
 dom.openAnalysisExamplesBtn?.addEventListener('click', () => {

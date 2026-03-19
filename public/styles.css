@@ -1278,13 +1278,13 @@ x§
 
 /***** App shell *****/
 .app-shell {
-  min-height: 100vh;
+  min-height: 80vh;
   padding-top: 120px;
 }
 
 .page-surface {
   width: 80vw;
-  min-height: 50vh;
+  min-height: 80vh;
   margin: 0 auto;
   /* background: var(--white); */
   /* box-shadow: var(--shadow-bg-drop-suttle); */
@@ -1313,6 +1313,8 @@ x§
 .intro-copy {
   max-width: 45vw;
   width: 100%;
+      margin-left: 50px;
+  margin-right: 50px;
 }
 
 .eyebrow {
@@ -1383,6 +1385,8 @@ x§
   padding: 34px 28px 26px;
   position: relative;
   box-shadow: var(--shadow-bg-drop-suttle);
+      margin-left: 50px;
+  margin-right: 50px;
 }
 
 .analysis-modal__tag {
@@ -1842,4 +1846,16 @@ x§
   .scroll-to-bottom-btn .icon {
     font-size: 20px;
   }
+}
+
+
+#scroll-to-bottom-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#scroll-to-bottom-btn.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
