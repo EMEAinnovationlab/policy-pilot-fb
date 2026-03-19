@@ -1339,6 +1339,7 @@ x§
   font-family: var(--font-serif);
   font-weight: 500;
   line-height: 0.95;
+  max-width: 760px;
   color: var(--black);
 }
 
@@ -1860,4 +1861,81 @@ x§
   opacity: 1;
   pointer-events: auto;
 }
+
+
+/* -----------------------------------
+   Intro soft entrance
+----------------------------------- */
+
+.intro-reveal {
+  opacity: 0;
+  transform: translateY(14px) scale(0.995);
+  filter: blur(6px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease,
+    filter 0.7s ease;
+  will-change: opacity, transform, filter;
+}
+
+.intro-reveal.is-generated {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
+.intro-reveal--delayed {
+  transition-delay: 0.18s;
+}
+
+/* Optional: slightly softer button child reveal */
+.intro-actions.is-generated > * {
+  animation: introButtonRise 0.55s ease both;
+}
+
+.intro-actions.is-generated > *:nth-child(1) {
+  animation-delay: 0.10s;
+}
+
+.intro-actions.is-generated > *:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.intro-actions.is-generated > *:nth-child(3) {
+  animation-delay: 0.26s;
+}
+
+.intro-actions.is-generated > *:nth-child(4) {
+  animation-delay: 0.34s;
+}
+
+@keyframes introButtonRise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .intro-reveal,
+  .intro-reveal.is-generated,
+  .intro-actions.is-generated > * {
+    transition: none;
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+
+
+
 
