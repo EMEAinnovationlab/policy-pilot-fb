@@ -1770,7 +1770,7 @@ x§
 
 
 .scroll-to-bottom-btn {
-  position: fixed;
+  position: absolute;
   left: 50%;
   bottom: 32px;
   transform: translateX(-50%);
