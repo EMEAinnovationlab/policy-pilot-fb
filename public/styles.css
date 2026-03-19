@@ -1371,11 +1371,12 @@ x§
 
 /***** Analysis modal *****/
 .analysis-modal {
-  width: 100%;
+  width: 105%;
   display: flex;
   justify-content: center;
   margin-top: 28px;
   margin-bottom: 30px;
+  margin-left: -2.5%;
 }
 
 .analysis-modal__inner {
