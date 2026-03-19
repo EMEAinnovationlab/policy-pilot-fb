@@ -1,215 +1,316 @@
 <!doctype html>
-<html lang="en">
+<html lang="nl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Policy Pilot — Chat</title>
+  <title>Policy Pilot — Analysis Tool</title>
 
-  <!-- Markdown Renderer -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-  <!-- Main stylesheet (includes Google Fonts via @import) -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="site-header" role="navigation" aria-label="Primary">
-  <div class="header-inner">
-    <a class="brand" id="warning-modal" href="/">
+  <header class="site-header" role="navigation" aria-label="Primary">
+    <div class="header-inner">
+      <a class="brand" href="/">
         <img class="logo" src="images/brand/logo_icon_medium.png" alt="">
-    
-      </span>
-      <span class="brand-text">
-        <span class="brand-title">Policy Pilot</span>
-        <span class="brand-subtitle">TECH SECTOR</span>
-      </span>
-    </a>
+        <span class="brand-text">
+          <span class="brand-title">Policy Pilot</span>
+          <span class="brand-subtitle">TECH SECTOR</span>
+        </span>
+      </a>
 
-    <nav class="main-nav">
-      <a href="#about" class="nav-link">Over Policy Pilot</a>
-      <a href="#how" class="nav-link">Hoe werkt het?</a>
-      <a href="#data" class="nav-link">Data</a>
-      <a id="warning-modal" class="nav-cta">Nieuw gesprek</a>
-      <a id="logout" class="nav-link">Log out</a>
-      <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">
-        ☰
+      <nav class="main-nav">
+        <a href="#about" class="nav-link">Over Policy Pilot</a>
+        <a href="#how" class="nav-link">Hoe werkt het?</a>
+        <a href="#data" class="nav-link">Data</a>
+        <button id="new-analysis-nav" class="nav-cta" type="button">Begin opnieuw</button>
+        <a id="logout" class="nav-link">Log out</a>
+
+        <button
+          class="nav-toggle"
+          aria-label="Open menu"
+          aria-expanded="false"
+          aria-controls="nav-drawer"
+          type="button"
+        >
+          ☰
+        </button>
+      </nav>
+    </div>
+
+    <div id="nav-drawer" class="nav-drawer hide" role="dialog" aria-modal="false" aria-label="Menu">
+      <a href="#about" class="drawer-link">Over Policy Pilot</a>
+      <a href="#how" class="drawer-link">Hoe werkt het?</a>
+      <a href="#data" class="drawer-link">Data</a>
+      <button id="new-analysis-drawer" class="nav-cta drawer-cta" type="button">Begin opnieuw</button>
+      <a href="/logout" class="drawer-link">Log out</a>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="page-surface">
+      <section id="intro-hero" class="intro-hero">
+        <div class="intro-copy">
+          <div class="eyebrow">
+            <img src="images/brand/chat_icon.png" alt="" class="eyebrow-icon">
+            <span>Introduction</span>
+          </div>
+
+          <h1 class="intro-title">
+            Policy Pilot Tech Sector is een analysetool om snel inzicht te krijgen in wat er speelt
+            in de politiek en het publiek m.b.t technologie.
+          </h1>
+
+          <p class="intro-text">
+            Het combineert actuele beleidsinformatie met inzichten uit de Edelman Trust Barometer,
+            met extra focus op technologie en innovatie. Zo kun je in één oogopslag begrijpen hoe
+            politiek en publiek sentiment elkaar beïnvloeden, en wat dat betekent voor jouw strategie.
+          </p>
+
+          <div class="intro-actions">
+            <button id="open-analysis-modal" class="btn btn-primary-rev intro-analysis-btn" type="button">
+              Doe een analyse
+            </button>
+            <a href="#how" class="intro-secondary-link">Hoe werkt Policy Pilot?</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="analysis-modal" class="analysis-modal hide" aria-labelledby="analysis-modal-title">
+        <div class="analysis-modal__inner">
+          <div class="analysis-modal__tag">nieuwe analyse</div>
+
+          <button
+            id="close-analysis-modal"
+            class="analysis-modal__close"
+            type="button"
+            aria-label="Sluit analyse invoer"
+          >
+            ×
+          </button>
+
+          <h2 id="analysis-modal-title" class="analysis-modal__title">
+            Formuleer je vraag voor de analyse.
+          </h2>
+
+          <p class="analysis-modal__text">
+            Probeer zo concreet mogelijke vraag te formuleren. Kom je er niet uit? Druk dan op voorbeeldvragen.
+          </p>
+
+          <div class="analysis-composer">
+            <textarea
+              id="analysis-input"
+              class="analysis-composer__input"
+              placeholder="Stel je analysevraag..."
+              aria-label="Analysevraag"
+            ></textarea>
+
+            <button
+              id="analysis-send"
+              class="analysis-composer__send"
+              type="button"
+              aria-label="Start analyse"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
+                <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
+              </svg>
+            </button>
+
+            <button id="open-analysis-examples" class="analysis-composer__examples" type="button">
+              voorbeeldvragen
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="analysis-frame" class="analysis-frame hide" aria-live="polite">
+        <div class="analysis-frame__inner">
+          <div id="analysis-request-pill" class="analysis-request-pill hide"></div>
+
+          <div id="analysis-status" class="analysis-status hide">
+            <div class="eyebrow">
+              <img src="images/brand/chat_icon.png" alt="" class="eyebrow-icon">
+              <span>Success</span>
+            </div>
+            <p id="analysis-status-text"></p>
+          </div>
+
+          <article id="analysis-report" class="analysis-report">
+            <div id="analysis-report-body" class="analysis-report__body">
+              <!-- streamed analysis body -->
+            </div>
+
+            <section id="analysis-sources" class="analysis-sources">
+              <!-- sources -->
+            </section>
+
+            <div class="analysis-report__actions">
+              <button id="summary-btn" class="pp-post-btn hide" type="button">Maak samenvatting</button>
+            </div>
+
+            <section id="chat-modal" class="chat-modal hide" aria-labelledby="chat-modal-title">
+              <div class="chat-modal__tag">stel een vraag</div>
+
+              <button
+                id="close-chat-modal"
+                class="chat-modal__close"
+                type="button"
+                aria-label="Sluit chat invoer"
+              >
+                ×
+              </button>
+
+              <h3 id="chat-modal-title" class="chat-modal__title">Ga in gesprek met het rapport.</h3>
+              <p class="chat-modal__text">Stel vragen over het rapport, of laat het samenvatten.</p>
+
+              <div id="analysis-followup-thread" class="analysis-followup-thread">
+                <!-- follow-up messages appear here -->
+              </div>
+
+              <div class="chat-composer">
+                <textarea
+                  id="chat-input"
+                  class="chat-composer__input"
+                  placeholder="Stel een vervolgvraag..."
+                  aria-label="Vervolgvraag"
+                ></textarea>
+
+                <button
+                  id="chat-send"
+                  class="chat-composer__send"
+                  type="button"
+                  aria-label="Verstuur vervolgvraag"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
+                    <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
+                  </svg>
+                </button>
+
+                <button id="open-chat-examples" class="chat-composer__examples" type="button">
+                  voorbeeldvragen
+                </button>
+              </div>
+            </section>
+          </article>
+        </div>
+      </section>
+
+      <section id="new-analysis-section" class="new-analysis-section hide">
+        <h2>Nieuwe analyse?</h2>
+        <p>Laat Policy Pilot opnieuw een analyse doen.</p>
+        <button id="start-new-analysis-bottom" class="btn btn-primary-rev" type="button">
+          Doe een analyse
+        </button>
+      </section>
+    </section>
+  </main>
+
+  <div
+    id="analysis-examples-modal"
+    class="examples-modal hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="analysis-examples-title"
+  >
+    <div class="examples-modal__backdrop" data-close-analysis-examples></div>
+    <div class="examples-modal__card">
+      <div class="examples-modal__tag">nieuwe analyse</div>
+
+      <button
+        id="close-analysis-examples"
+        class="examples-modal__close"
+        type="button"
+        aria-label="Sluit voorbeeldvragen"
+      >
+        ×
       </button>
-    </nav>
 
+      <h2 id="analysis-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
+      <p class="examples-modal__text">Hier komen voorbeeldvragen voor het starten van een analyse.</p>
 
-  <!-- Mobile drawer -->
-  <div id="nav-drawer" class="nav-drawer hide" role="dialog" aria-modal="false" aria-label="Menu">
-    <a href="#about" class="drawer-link">Over Policy Pilot</a>
-    <a href="#how" class="drawer-link">Hoe werkt het?</a>
-    <a href="#data" class="drawer-link">Data</a>
-    <a href="/new" class="nav-cta drawer-cta">Nieuw gesprek</a>
-    <a href="/logout" class="drawer-link">Log out</a>
-  </div>
-</header>
-
-  </div>
-
-
- <div class="main-wrapper">
-    <div class="chat-wrapper">
-       <div class="chat-gradient"></div>
-        <div id="chat" class="chat"></div>
+      <div id="analysis-examples-list" class="examples-modal__list"></div>
     </div>
-</div>
+  </div>
 
-<div class="row-wrapper">
-    <div class="row">
-  <!-- Example Prompts -->
-  <!-- <div id="example-prompts" class="example-prompts hide">
-    <div class="example-header">
-      <h4>Example Questions</h4>
-      <button class="close-button" id="close-examples" aria-label="Close examples" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="9" fill="white"/>
-        <path d="M12 6L6 12" stroke="#966A21" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 6L12 12" stroke="#966A21" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+  <div
+    id="chat-examples-modal"
+    class="examples-modal hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="chat-examples-title"
+  >
+    <div class="examples-modal__backdrop" data-close-chat-examples></div>
+    <div class="examples-modal__card">
+      <div class="examples-modal__tag examples-modal__tag--red">stel een vraag</div>
+
+      <button
+        id="close-chat-examples"
+        class="examples-modal__close"
+        type="button"
+        aria-label="Sluit voorbeeldvragen"
+      >
+        ×
       </button>
-    </div> -->
 
-    <div id="example-prompts" class="example-prompts hide">
-      <div class="request_button"><h4>nieuw verzoek</h4></div>
-  <div class="example-header">
-    
-    <h2 class="h2_styled">Stel een vraag aan Policy Pilot<br>over policies en trust.</h2>
+      <h2 id="chat-examples-title" class="examples-modal__title">Voorbeeldvragen</h2>
+      <p class="examples-modal__text">Hier komen voorbeeldvragen voor vervolgvragen binnen het rapport.</p>
 
-    <button class="close-button" id="close-examples" aria-label="Close examples" type="button">
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="9" fill="white"/>
-        <path d="M12 6L6 12" stroke="#966A21" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 6L12 12" stroke="#966A21" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>    </button>
-  </div>
-
-  <!-- We’ll fill this via JS -->
-  <div class="examples-carousel">
-        <h4 class="h4_small">Voorbeeld vragen</h4>
-  <div id="examples-grid" class="examples-grid">
-    <!-- cards injected here -->
-  </div>
-
-  <div class="examples-nav" aria-label="Example prompts navigation">
-    <button type="button" class="examples-nav-btn" id="examples-prev" aria-label="Previous examples">
-      ‹
-    </button>
-
-    <div class="examples-dots" id="examples-dots" aria-hidden="true"></div>
-
-    <button type="button" class="examples-nav-btn" id="examples-next" aria-label="Next examples">
-      ›
-    </button>
-  </div>
-</div>
-
-</div>
-
-
-    <!-- <div class="examples-grid">
-      <div class="example" data-prompt="What are the current policy p   riorities of the Ministry of Economic Affairs?">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">What are the current policy priorities of the Ministry of Economic Affairs?</div>
-      </div>
-      <div class="example" data-prompt="What are the current policy p   riorities of the Ministry of Economic Affairs?">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">What are the current policy priorities of the Ministry of Economic Affairs?</div>
-      </div>
-      <div class="example" data-prompt="What are the current policy p   riorities of the Ministry of Economic Affairs?">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">What are the current policy priorities of the Ministry of Economic Affairs?</div>
-      </div>
-      <div class="example" data-prompt="How does the EU’s Green Deal affect Dutch industry?">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">How does the EU’s Green Deal affect Dutch industry?</div>
-      </div>
-      <div class="example" data-prompt="Summarize the latest political developments in the tech sector.">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">Summarize the latest political developments in the tech sector.</div>
-      </div>
-      <div class="example" data-prompt="What are the main arguments around AI regulation in the Netherlands?">
-        <div class="example-title">What thinks party X about</div>
-        <div class="example-text">What are the main arguments around AI regulation in the Netherlands?</div>
-      </div>
-    </div>
-  </div> -->
-
-
-<button id="toggle-examples" class="examples-toggle" type="button">Nieuw data verzoek</button>
-
-
-<div class="input-wrap">
-  <textarea id="input" placeholder="stel zelf een vraag" aria-label="Your message">
-Stel zelf een vraag...
-  </textarea>
-      <!-- <label class="db-toggle">
-  <input type="checkbox" id="use-db" checked />
-  <span>zoek in politieke data</span>
-</label> -->
-  <button id="send" type="button" aria-label="Send message">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="23" viewBox="0 0 15 23" fill="none">
-    <path d="M8.07112 0.292892C7.6806 -0.0976315 7.04743 -0.0976314 6.65691 0.292892L0.292945 6.65685C-0.0975792 7.04738 -0.0975792 7.68054 0.292945 8.07107C0.68347 8.46159 1.31663 8.46159 1.70716 8.07107L7.36401 2.41421L13.0209 8.07107C13.4114 8.46159 14.0446 8.46159 14.4351 8.07107C14.8256 7.68054 14.8256 7.04738 14.4351 6.65685L8.07112 0.292892ZM7.36401 23L8.36401 23L8.36401 1L7.36401 1L6.36401 1L6.36401 23L7.36401 23Z" fill="#FFFCF7"/>
-    </svg>
-  </button>
-
-
-</div>
-
-<p class="side_note">Policy Pilot kan fouten maken. Policy Pilot gebruikt jouw gegevens niet om zijn modellen te trainen.</p>
-
-<!-- Confirm New Conversation Modal -->
-<div id="confirm-modal" class="modal-overlay hide" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-  <div class="modal-card" role="document">
-    <h2 id="confirm-title">Weet je het zeker? Je huidige gesprek wordt niet opgeslagen.</h2>
-    <p class="modal-body">
-     Policy Pilot slaat geen gegevens op, waardoor eerdere chats niet bewaard blijven en verdwijnen zodra je een nieuwe chat start.
-    </p>
-    <div class="modal-actions">
-      <button id="modal-cancel" class="btn btn-primary" type="button">Cancel</button>
-      <button id="clear" class="btn btn-secondary" type="button">Nieuw gesprek</button>
+      <div id="chat-examples-list" class="examples-modal__list"></div>
     </div>
   </div>
-</div>
 
-
-
-<!-- Context Modal -->
-<div id="content-modal" class="pp-modal" aria-hidden="true">
-  <div class="pp-modal__backdrop" data-close></div>
-  <div class="pp-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="pp-modal-title">
-    <button class="pp-modal__close" type="button" aria-label="Close" data-close>×</button>
-    <div class="pp-modal__hero">
-      <div class="pp-modal__nav" role="tablist" aria-label="Context pages">
-        <button class="pp-navbtn is-active" role="tab" aria-selected="true" data-page="about">Over Policy Pilot</button>
-        <button class="pp-navbtn" role="tab" aria-selected="false" data-page="how">Hoe werkt het?</button>
-        <button class="pp-navbtn" role="tab" aria-selected="false" data-page="data">Data</button>
+  <div
+    id="confirm-modal"
+    class="modal-overlay hide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirm-title"
+  >
+    <div class="modal-card" role="document">
+      <h2 id="confirm-title">Weet je het zeker? Je huidige analyse wordt niet opgeslagen.</h2>
+      <p class="modal-body">
+        Policy Pilot slaat geen gegevens op, waardoor eerdere analyses niet bewaard blijven en verdwijnen zodra je opnieuw begint.
+      </p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-primary" type="button">Cancel</button>
+        <button id="clear" class="btn btn-secondary" type="button">Begin opnieuw</button>
       </div>
     </div>
-    
-    <div class="pp-modal__body">
-      <h2 id="pp-modal-title" class="pp-modal__title"></h2>
-      <div id="pp-modal-content" class="pp-modal__content"></div>
+  </div>
+
+  <div id="content-modal" class="pp-modal" aria-hidden="true">
+    <div class="pp-modal__backdrop" data-close></div>
+    <div class="pp-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="pp-modal-title">
+      <button class="pp-modal__close" type="button" aria-label="Close" data-close>×</button>
+
+      <div class="pp-modal__hero">
+        <div class="pp-modal__nav" role="tablist" aria-label="Context pages">
+          <button class="pp-navbtn is-active" role="tab" aria-selected="true" data-page="about">
+            Over Policy Pilot
+          </button>
+          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="how">
+            Hoe werkt het?
+          </button>
+          <button class="pp-navbtn" role="tab" aria-selected="false" data-page="data">
+            Data
+          </button>
+        </div>
+      </div>
+
+      <div class="pp-modal__body">
+        <h2 id="pp-modal-title" class="pp-modal__title"></h2>
+        <div id="pp-modal-content" class="pp-modal__content"></div>
+      </div>
     </div>
   </div>
-</div>
 
-
-
-
-  <!-- Main JS -->
   <script type="module" src="/js/main.js"></script>
   <script type="module" src="/js/modal.js"></script>
   <script type="module" src="/js/logout.js"></script>
-  <!-- <script type="module" src="/js/reddiv.js"></script> -->
-
 
   <script type="module">
-  import { applyProjectSettings } from '/js/project_settings.js';
-  applyProjectSettings();
-</script>
-
-
+    import { applyProjectSettings } from '/js/project_settings.js';
+    applyProjectSettings();
+  </script>
 </body>
 </html>
