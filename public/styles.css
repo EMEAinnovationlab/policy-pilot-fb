@@ -1947,20 +1947,34 @@ x§
 
 .analysis-modal {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.18s;
 }
 
 .analysis-modal.is-visible {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0s;
 }
 
 .analysis-modal__inner {
   opacity: 0;
-  transition: opacity 0.15s ease;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.18s;
 }
 
 .analysis-modal.is-visible .analysis-modal__inner {
   opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0s;
 }

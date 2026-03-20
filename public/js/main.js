@@ -65,6 +65,7 @@ const INTRO_GENERATION = {
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
 const ANALYSIS_MODAL_FADE_MS = 150;
 
+
 async function loadProjectPromptsFromServer() {
   try {
     const res = await fetch('/api/project-settings', { credentials: 'same-origin' });
@@ -828,18 +829,25 @@ function openAnalysisModal({ reset = false } = {}) {
 
   clearAnalysisModalHideTimer();
   hideIntroActions();
-  show(dom.analysisModal);
+
   dom.analysisModal.classList.remove('is-visible');
+  show(dom.analysisModal);
 
   appState.phase = 'analysis-modal-open';
 
   scrollIntoViewCentered(dom.analysisModal);
 
   requestAnimationFrame(() => {
-    dom.analysisModal.classList.add('is-visible');
-    dom.analysisInput?.focus();
+    // Force the browser to register the hidden state first
+    void dom.analysisModal.offsetHeight;
+
+    requestAnimationFrame(() => {
+      dom.analysisModal.classList.add('is-visible');
+      dom.analysisInput?.focus();
+    });
   });
 }
+
 
 function closeAnalysisModal() {
   dom.analysisModal.classList.remove('is-visible');
