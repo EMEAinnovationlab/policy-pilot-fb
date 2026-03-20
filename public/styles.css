@@ -462,6 +462,7 @@ button:hover { box-shadow: var(--shadow-subtle); }
   background: #fff;
   justify-self: stretch;
   min-height: 120px;
+  text-align: left;
   
 }
 .example:hover { background: var(--white); }
@@ -1748,6 +1749,7 @@ x§
   display: flex;
   flex-direction: column;
   gap: 12px;
+  text-align: left;
 }
 
 .examples-modal__list .example {
