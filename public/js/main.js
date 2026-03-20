@@ -29,10 +29,12 @@
 // - intro generation does not run when there is restored progress
 // - draft analysis input is restored on refresh within the same tab
 // - analysis-report only appears once streaming actually starts
-// - analysis status now animates through:
+// - loading animation now lives in the analysis-report eyebrow
+// - eyebrow icon spins while loading
+// - eyebrow text cycles through:
 //   formuleert vraag -> onderzoekt documenten -> maakt rapport
-// - status icon spins while loading
-// - loading dots animate like typing
+// - report body stays empty until first streamed words arrive
+// - loading eyebrow stops immediately on first token
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -70,7 +72,7 @@ const INTRO_GENERATION = {
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
 const ANALYSIS_MODAL_FADE_MS = 150;
 
-const ANALYSIS_STATUS_SEQUENCE = [
+const REPORT_EYEBROW_LOADING_SEQUENCE = [
   { text: 'Formuleert vraag', minMs: 900 },
   { text: 'Onderzoekt documenten', minMs: 1400 },
   { text: 'Maakt rapport', minMs: 99999999 }
@@ -181,11 +183,13 @@ const appState = {
   isUserScrolling: false,
   introGenerationTimer: null,
   analysisModalHideTimer: null,
-  analysisStatusStepTimer: null,
-  analysisStatusDotsTimer: null,
-  analysisStatusIconAnimation: null,
-  analysisStatusBaseText: '',
-  analysisStatusMode: 'static'
+
+  reportEyebrowStepTimer: null,
+  reportEyebrowDotsTimer: null,
+  reportEyebrowIconAnimation: null,
+  reportEyebrowBaseText: '',
+  reportEyebrowLoading: false,
+  reportFirstTokenSeen: false
 };
 
 // ------------------------------------------------------------
@@ -567,159 +571,138 @@ function hasMeaningfulProgress() {
 }
 
 // ------------------------------------------------------------
-// Animated analysis status
+// Report eyebrow loading animation
 // ------------------------------------------------------------
-function clearAnalysisStatusTimers() {
-  if (appState.analysisStatusStepTimer) {
-    clearTimeout(appState.analysisStatusStepTimer);
-    appState.analysisStatusStepTimer = null;
+function clearReportEyebrowTimers() {
+  if (appState.reportEyebrowStepTimer) {
+    clearTimeout(appState.reportEyebrowStepTimer);
+    appState.reportEyebrowStepTimer = null;
   }
 
-  if (appState.analysisStatusDotsTimer) {
-    clearInterval(appState.analysisStatusDotsTimer);
-    appState.analysisStatusDotsTimer = null;
+  if (appState.reportEyebrowDotsTimer) {
+    clearInterval(appState.reportEyebrowDotsTimer);
+    appState.reportEyebrowDotsTimer = null;
   }
 
-  if (appState.analysisStatusIconAnimation?.cancel) {
-    appState.analysisStatusIconAnimation.cancel();
+  if (appState.reportEyebrowIconAnimation?.cancel) {
+    appState.reportEyebrowIconAnimation.cancel();
   }
-  appState.analysisStatusIconAnimation = null;
+  appState.reportEyebrowIconAnimation = null;
 }
 
-function renderAnalysisStatusHtml(text, dots = '', isLoading = false) {
+function renderReportEyebrow(text, { loading = false, dots = '' } = {}) {
   return `
-    <span style="display:inline-flex;align-items:center;gap:10px;">
+    <div class="eyebrow">
       <img
-        id="analysis-status-icon"
+        id="analysis-report-eyebrow-icon"
         src="${STRAPLINE.iconUrl}"
         alt=""
-        aria-hidden="true"
-        style="
-          width:16px;
-          height:16px;
-          display:inline-block;
-          transform-origin:center center;
-          flex:0 0 auto;
-        "
+        class="eyebrow-icon"
+        style="transform-origin:center center;"
       >
-      <span style="display:inline-flex;align-items:baseline;">
-        <span>${escapeHtml(text)}</span>
-        <span
-          aria-hidden="true"
-          style="
-            display:inline-block;
-            min-width:1.6em;
-            margin-left:2px;
-            letter-spacing:0.08em;
-            opacity:${isLoading ? '1' : '0.75'};
-          "
-        >${escapeHtml(dots)}</span>
-      </span>
-    </span>
+      <span id="analysis-report-eyebrow-text">${escapeHtml(text)}</span>
+      <span
+        id="analysis-report-eyebrow-dots"
+        aria-hidden="true"
+        style="display:inline-block; min-width:1.6em; margin-left:2px;"
+      >${loading ? escapeHtml(dots) : ''}</span>
+    </div>
   `;
 }
 
-function restartAnalysisStatusIconSpin() {
-  const icon = document.getElementById('analysis-status-icon');
-  if (!icon || !icon.animate) return;
+function setReportEyebrow(text, { loading = false, dots = '' } = {}) {
+  appState.reportEyebrowBaseText = text;
+  appState.reportEyebrowLoading = loading;
 
-  if (appState.analysisStatusIconAnimation?.cancel) {
-    appState.analysisStatusIconAnimation.cancel();
+  const eyebrow = document.getElementById('analysis-report-eyebrow');
+  if (!eyebrow) return;
+
+  eyebrow.innerHTML = renderReportEyebrow(text, { loading, dots });
+
+  if (loading) {
+    const icon = document.getElementById('analysis-report-eyebrow-icon');
+    if (icon?.animate) {
+      if (appState.reportEyebrowIconAnimation?.cancel) {
+        appState.reportEyebrowIconAnimation.cancel();
+      }
+
+      appState.reportEyebrowIconAnimation = icon.animate(
+        [
+          { transform: 'rotate(0deg)' },
+          { transform: 'rotate(360deg)' }
+        ],
+        {
+          duration: 900,
+          iterations: Infinity,
+          easing: 'linear'
+        }
+      );
+    }
+  } else {
+    if (appState.reportEyebrowIconAnimation?.cancel) {
+      appState.reportEyebrowIconAnimation.cancel();
+      appState.reportEyebrowIconAnimation = null;
+    }
   }
-
-  appState.analysisStatusIconAnimation = icon.animate(
-    [
-      { transform: 'rotate(0deg)' },
-      { transform: 'rotate(360deg)' }
-    ],
-    {
-      duration: 900,
-      iterations: Infinity,
-      easing: 'linear'
-    }
-  );
 }
 
-function setAnalysisStatusMessage(text, { loading = false } = {}) {
-  appState.analysisStatusBaseText = text;
-  appState.analysisStatusMode = loading ? 'loading' : 'static';
-
-  if (!dom.analysisStatusText) return;
-
-  dom.analysisStatusText.innerHTML = renderAnalysisStatusHtml(
-    text,
-    loading ? '.' : '',
-    loading
-  );
-
-  requestAnimationFrame(() => {
-    if (loading) {
-      restartAnalysisStatusIconSpin();
-    } else if (appState.analysisStatusIconAnimation?.cancel) {
-      appState.analysisStatusIconAnimation.cancel();
-      appState.analysisStatusIconAnimation = null;
-    }
-  });
-}
-
-function startAnalysisStatusDots() {
-  if (!dom.analysisStatusText) return;
+function startReportEyebrowLoadingSequence() {
+  clearReportEyebrowTimers();
+  appState.reportFirstTokenSeen = false;
 
   let dotCount = 1;
-
-  clearAnalysisStatusTimers();
-  setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[0].text, { loading: true });
-
-  appState.analysisStatusDotsTimer = setInterval(() => {
-    if (appState.analysisStatusMode !== 'loading') return;
-
-    dotCount = (dotCount % 3) + 1;
-    dom.analysisStatusText.innerHTML = renderAnalysisStatusHtml(
-      appState.analysisStatusBaseText,
-      '.'.repeat(dotCount),
-      true
-    );
-    restartAnalysisStatusIconSpin();
-  }, 320);
-}
-
-function startAnalysisStatusSequence() {
-  clearAnalysisStatusTimers();
-  show(dom.analysisStatus);
-
   let index = 0;
 
-  startAnalysisStatusDots();
-  setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[index].text, { loading: true });
+  setReportEyebrow(REPORT_EYEBROW_LOADING_SEQUENCE[index].text, {
+    loading: true,
+    dots: '.'
+  });
+
+  appState.reportEyebrowDotsTimer = setInterval(() => {
+    if (appState.reportFirstTokenSeen) return;
+
+    dotCount = (dotCount % 3) + 1;
+    setReportEyebrow(REPORT_EYEBROW_LOADING_SEQUENCE[index].text, {
+      loading: true,
+      dots: '.'.repeat(dotCount)
+    });
+  }, 320);
 
   const advance = () => {
+    if (appState.reportFirstTokenSeen) return;
+
     index += 1;
-    if (index >= ANALYSIS_STATUS_SEQUENCE.length) return;
+    if (index >= REPORT_EYEBROW_LOADING_SEQUENCE.length) return;
 
-    setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[index].text, { loading: true });
+    dotCount = 1;
+    setReportEyebrow(REPORT_EYEBROW_LOADING_SEQUENCE[index].text, {
+      loading: true,
+      dots: '.'
+    });
 
-    const next = ANALYSIS_STATUS_SEQUENCE[index];
-    if (Number.isFinite(next.minMs) && next.minMs < 90000000) {
-      appState.analysisStatusStepTimer = setTimeout(advance, next.minMs);
+    const step = REPORT_EYEBROW_LOADING_SEQUENCE[index];
+    if (Number.isFinite(step.minMs) && step.minMs < 90000000) {
+      appState.reportEyebrowStepTimer = setTimeout(advance, step.minMs);
     }
   };
 
-  const first = ANALYSIS_STATUS_SEQUENCE[0];
-  if (Number.isFinite(first.minMs) && first.minMs < 90000000) {
-    appState.analysisStatusStepTimer = setTimeout(advance, first.minMs);
+  const firstStep = REPORT_EYEBROW_LOADING_SEQUENCE[0];
+  if (Number.isFinite(firstStep.minMs) && firstStep.minMs < 90000000) {
+    appState.reportEyebrowStepTimer = setTimeout(advance, firstStep.minMs);
   }
 }
 
-function stopAnalysisStatusLoading(finalText) {
-  clearAnalysisStatusTimers();
-  setAnalysisStatusMessage(finalText, { loading: false });
+function stopReportEyebrowLoadingToDefault() {
+  appState.reportFirstTokenSeen = true;
+  clearReportEyebrowTimers();
+  setReportEyebrow('Policy en trust rapport', { loading: false });
 }
 
-function clearAnalysisStatusCompletely() {
-  clearAnalysisStatusTimers();
-  appState.analysisStatusBaseText = '';
-  appState.analysisStatusMode = 'static';
-  if (dom.analysisStatusText) dom.analysisStatusText.innerHTML = '';
+function clearReportEyebrowState() {
+  appState.reportFirstTokenSeen = false;
+  appState.reportEyebrowBaseText = '';
+  appState.reportEyebrowLoading = false;
+  clearReportEyebrowTimers();
 }
 
 // ------------------------------------------------------------
@@ -768,10 +751,18 @@ function restoreSession() {
     show(dom.analysisRequestPill);
   }
 
-  stopAnalysisStatusLoading('Hersteld na verversen. Je kunt verder met deze analyse.');
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = 'Hersteld na verversen. Je kunt verder met deze analyse.';
+  }
   show(dom.analysisStatus);
 
-  setHtml(dom.analysisReportBody, parseMarkdown(appState.activeAnalysisContent));
+  setHtml(dom.analysisReportBody, `
+    <div id="analysis-report-eyebrow">
+      ${renderReportEyebrow('Policy en trust rapport')}
+    </div>
+    <div id="analysis-stream-content">${parseMarkdown(appState.activeAnalysisContent)}</div>
+  `);
+
   renderSources(appState.activeAnalysisSources);
 
   show(dom.summaryBtn);
@@ -1064,7 +1055,7 @@ function hardResetAnalysisState() {
   clearPersistedSession();
   clearAnalysisDraft();
   clearAnalysisModalHideTimer();
-  clearAnalysisStatusCompletely();
+  clearReportEyebrowState();
 
   appState.phase = 'idle';
   appState.activeAnalysisPrompt = '';
@@ -1095,6 +1086,9 @@ function hardResetAnalysisState() {
     hide(dom.analysisRequestPill);
   }
 
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = '';
+  }
   hide(dom.analysisStatus);
 
   setHtml(dom.analysisReportBody, '');
@@ -1122,14 +1116,17 @@ function renderLoading(prompt) {
     show(dom.analysisRequestPill);
   }
 
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = '';
+  }
+  hide(dom.analysisStatus);
+
   hide(dom.analysisReport);
   setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
 
   hide(dom.summaryBtn);
   hide(dom.chatModal);
-
-  startAnalysisStatusSequence();
 
   scrollMessageToTop(dom.analysisFrame);
   scheduleScrollButtonUpdate();
@@ -1139,13 +1136,16 @@ function renderStreamingStart() {
   show(dom.analysisReport);
 
   setHtml(dom.analysisReportBody, `
-    <div class="eyebrow">
-      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-      <span>Policy en trust rapport</span>
+    <div id="analysis-report-eyebrow">
+      ${renderReportEyebrow(REPORT_EYEBROW_LOADING_SEQUENCE[0].text, {
+        loading: true,
+        dots: '.'
+      })}
     </div>
     <div id="analysis-stream-content"></div>
   `);
 
+  startReportEyebrowLoadingSequence();
   scheduleScrollButtonUpdate();
 }
 
@@ -1181,10 +1181,13 @@ function renderDone(content, sources) {
   appState.activeAnalysisContent = content;
   appState.activeAnalysisSources = Array.isArray(sources) ? sources : [];
 
-  stopAnalysisStatusLoading('Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.');
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = 'Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.';
+  }
   show(dom.analysisStatus);
   show(dom.analysisReport);
 
+  stopReportEyebrowLoadingToDefault();
   updateAnalysisStream(content);
   renderSources(appState.activeAnalysisSources);
 
@@ -1198,13 +1201,17 @@ function renderDone(content, sources) {
 
 function renderAnalysisError(message) {
   show(dom.analysisReport);
-  stopAnalysisStatusLoading('De analyse kon niet worden voltooid.');
+
+  if (dom.analysisStatusText) {
+    dom.analysisStatusText.textContent = 'De analyse kon niet worden voltooid.';
+  }
   show(dom.analysisStatus);
 
+  stopReportEyebrowLoadingToDefault();
+
   setHtml(dom.analysisReportBody, `
-    <div class="eyebrow">
-      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-      <span>Policy en trust rapport</span>
+    <div id="analysis-report-eyebrow">
+      ${renderReportEyebrow('Policy en trust rapport')}
     </div>
     <h2>Er ging iets mis</h2>
     <p>${escapeHtml(message || 'Onbekende fout')}</p>
@@ -1226,7 +1233,8 @@ async function streamChatToElement({
   useRetrieval = false,
   targetEl,
   loadingHtml = '<p>Bezig met antwoorden...</p>',
-  abortController
+  abortController,
+  onFirstToken
 }) {
   if (targetEl) {
     targetEl.innerHTML = loadingHtml;
@@ -1256,6 +1264,7 @@ async function streamChatToElement({
   let buffer = '';
   let text = '';
   let sources = [];
+  let firstTokenHandled = false;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -1276,6 +1285,11 @@ async function streamChatToElement({
       const evt = JSON.parse(payload);
 
       if (evt.type === 'token') {
+        if (!firstTokenHandled) {
+          firstTokenHandled = true;
+          onFirstToken?.();
+        }
+
         text += evt.text || '';
         if (targetEl) {
           targetEl.innerHTML = parseMarkdown(text);
@@ -1311,6 +1325,7 @@ async function submitAnalysisRequest() {
   appState.activeAnalysisSources = [];
   appState.followupHistory = [];
   appState.phase = 'analysis-loading';
+  appState.reportFirstTokenSeen = false;
 
   closeAnalysisModal();
   renderLoading(prompt);
@@ -1329,7 +1344,10 @@ async function submitAnalysisRequest() {
       useRetrieval: true,
       targetEl: streamEl,
       loadingHtml: '',
-      abortController: controller
+      abortController: controller,
+      onFirstToken: () => {
+        stopReportEyebrowLoadingToDefault();
+      }
     });
 
     renderDone(text, sources);
@@ -1711,7 +1729,7 @@ hide(dom.analysisStatus);
 closeConfirmModal();
 closeAnalysisExamplesModal();
 closeChatExamplesModal();
-clearAnalysisStatusCompletely();
+clearReportEyebrowState();
 
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
