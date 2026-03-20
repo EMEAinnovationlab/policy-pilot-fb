@@ -63,7 +63,7 @@ const INTRO_GENERATION = {
 };
 
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
-const ANALYSIS_MODAL_FADE_MS = 250;
+const ANALYSIS_MODAL_FADE_MS = 150;
 
 async function loadProjectPromptsFromServer() {
   try {
