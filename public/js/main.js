@@ -31,59 +31,6 @@
 // ------------------------------------------------------------
 
 
-// -----------------------------
-// INTRO CONTENT (single source of truth)
-// -----------------------------
-
-const introContent = {
-  title: `
-    Policy Pilot Tech Sector is een analysetool om snel inzicht te krijgen in wat er speelt
-    in de politiek en het publiek m.b.t technologie.
-  `,
-  text: `
-    Het combineert actuele beleidsinformatie met inzichten uit de Edelman Trust Barometer,
-    met extra focus op technologie en innovatie. Zo kun je in één oogopslag begrijpen hoe
-    politiek en publiek sentiment elkaar beïnvloeden, en wat dat betekent voor jouw strategie.
-  `
-};
-
-
-// -----------------------------
-// INIT
-// -----------------------------
-
-window.addEventListener("DOMContentLoaded", () => {
-  injectIntroText();
-});
-
-
-// -----------------------------
-// FUNCTIONS
-// -----------------------------
-
-function injectIntroText() {
-  const titleEl = document.querySelector(".intro-title[data-generate]");
-  const textEl = document.querySelector(".intro-text[data-generate]");
-
-  if (titleEl) {
-    titleEl.textContent = cleanText(introContent.title);
-  }
-
-  if (textEl) {
-    textEl.textContent = cleanText(introContent.text);
-  }
-}
-
-
-// -----------------------------
-// HELPERS
-// -----------------------------
-
-function cleanText(str) {
-  return str.trim().replace(/\s+/g, " ");
-}
-
-
 
 import { enforceRole } from '/js/auth_guard.js';
 import { initSiteRouter } from '/js/siteRouter.js';
