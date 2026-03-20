@@ -61,7 +61,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--ink);
+  /* color: var(--ink); */
   font: var(--font-size)/var(--line-height) var(--font-family);
   display: grid;
   grid-template-rows: auto 1fr auto;
