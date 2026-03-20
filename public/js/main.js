@@ -13,7 +13,7 @@
 //
 // Updated:
 // - intro action buttons disappear when the analysis modal opens
-// - if the user closes the analysis modal without an active analysis,
+// - if the user closes the analysis modal without active progress,
 //   the intro action buttons come back
 // - intro action buttons no longer reappear after pressing send
 //   while an analysis is loading or already active
@@ -24,9 +24,10 @@
 // - scroll-to-bottom button only appears after an analysis is loaded
 // - scroll-to-bottom button fades in only while the user is scrolling
 // - scroll-to-bottom button fades away shortly after scrolling stops
-// - intro text now appears word by word as if it is being generated
-// - intro generation is one-time per browser tab session
-// - intro generation does not interfere with 5-minute analysis restore
+// - intro text appears word by word as if it is being generated
+// - intro generation runs on fresh page load
+// - intro generation does not run when there is restored progress
+// - draft analysis input is restored on refresh within the same tab
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -61,7 +62,8 @@ const INTRO_GENERATION = {
   linePause: 0.10
 };
 
-const INTRO_ANIMATION_SESSION_KEY = 'policyPilotIntroAnimated';
+const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
+const ANALYSIS_MODAL_FADE_MS = 250;
 
 async function loadProjectPromptsFromServer() {
   try {
@@ -165,7 +167,8 @@ const appState = {
   analysisAbortController: null,
   scrollFadeTimer: null,
   isUserScrolling: false,
-  introGenerationTimer: null
+  introGenerationTimer: null,
+  analysisModalHideTimer: null
 };
 
 // ------------------------------------------------------------
@@ -210,18 +213,41 @@ function resetTextarea(textarea) {
   textarea.style.overflowY = 'hidden';
 }
 
-function hasPlayedIntroAnimationThisSession() {
+function saveAnalysisDraft(value) {
   try {
-    return sessionStorage.getItem(INTRO_ANIMATION_SESSION_KEY) === '1';
+    const clean = String(value ?? '');
+    if (!clean.trim()) {
+      sessionStorage.removeItem(ANALYSIS_DRAFT_SESSION_KEY);
+      return;
+    }
+    sessionStorage.setItem(ANALYSIS_DRAFT_SESSION_KEY, clean);
+  } catch {}
+}
+
+function loadAnalysisDraft() {
+  try {
+    return sessionStorage.getItem(ANALYSIS_DRAFT_SESSION_KEY) || '';
   } catch {
-    return false;
+    return '';
   }
 }
 
-function markIntroAnimationPlayedThisSession() {
+function clearAnalysisDraft() {
   try {
-    sessionStorage.setItem(INTRO_ANIMATION_SESSION_KEY, '1');
+    sessionStorage.removeItem(ANALYSIS_DRAFT_SESSION_KEY);
   } catch {}
+}
+
+function hasDraftAnalysisRequest() {
+  const liveDraft = (dom.analysisInput?.value || '').trim();
+  if (liveDraft) return true;
+  return !!loadAnalysisDraft().trim();
+}
+
+function clearAnalysisModalHideTimer() {
+  if (!appState.analysisModalHideTimer) return;
+  clearTimeout(appState.analysisModalHideTimer);
+  appState.analysisModalHideTimer = null;
 }
 
 function getScrollRoot() {
@@ -426,7 +452,10 @@ function resetGeneratedIntroText() {
 
 function playGeneratedIntro() {
   const els = Array.from(document.querySelectorAll('[data-generate]'));
-  if (!els.length) return;
+  if (!els.length) {
+    dom.introActions?.classList.add('is-generated');
+    return;
+  }
 
   resetGeneratedIntroText();
 
@@ -450,9 +479,8 @@ function hideIntroActions() {
 function showIntroActions({ animate = true } = {}) {
   show(dom.introActions);
 
-  if (animate && !hasPlayedIntroAnimationThisSession()) {
+  if (animate) {
     playGeneratedIntro();
-    markIntroAnimationPlayedThisSession();
     return;
   }
 
@@ -507,6 +535,13 @@ function hasStartedAnalysisSession() {
     appState.activeAnalysisPrompt ||
     appState.activeAnalysisContent ||
     (Array.isArray(appState.followupHistory) && appState.followupHistory.length > 0)
+  );
+}
+
+function hasMeaningfulProgress() {
+  return !!(
+    hasStartedAnalysisSession() ||
+    hasDraftAnalysisRequest()
   );
 }
 
@@ -591,6 +626,20 @@ function restoreSession() {
   return true;
 }
 
+function restoreDraftProgress() {
+  const savedDraft = loadAnalysisDraft();
+  if (!savedDraft.trim()) return false;
+
+  if (dom.analysisInput) {
+    dom.analysisInput.value = savedDraft;
+    autoGrowTextarea(dom.analysisInput);
+  }
+
+  hideIntroActions();
+  openAnalysisModal({ reset: false });
+  return true;
+}
+
 // ------------------------------------------------------------
 // Site router
 // ------------------------------------------------------------
@@ -663,7 +712,6 @@ function closeDrawerIfOpen() {
 
 // ------------------------------------------------------------
 // Example prompts
-// Later: replace with Supabase typed examples
 // ------------------------------------------------------------
 const analysisExampleQuestions = [
   {
@@ -722,6 +770,7 @@ renderExampleCards(dom.analysisExamplesList, analysisExampleQuestions, (prompt) 
   if (dom.analysisInput) {
     dom.analysisInput.value = prompt;
     autoGrowTextarea(dom.analysisInput);
+    saveAnalysisDraft(dom.analysisInput.value);
     dom.analysisInput.focus();
   }
   closeAnalysisExamplesModal();
@@ -751,7 +800,8 @@ function hasActiveWork() {
   return !!(
     appState.activeAnalysisContent ||
     appState.activeAnalysisPrompt ||
-    (Array.isArray(appState.followupHistory) && appState.followupHistory.length)
+    (Array.isArray(appState.followupHistory) && appState.followupHistory.length) ||
+    hasDraftAnalysisRequest()
   );
 }
 
@@ -771,12 +821,14 @@ function requestNewConversation() {
 // Analysis launcher / chat visibility
 // ------------------------------------------------------------
 function openAnalysisModal({ reset = false } = {}) {
-  if (reset) resetTextarea(dom.analysisInput);
+  if (reset) {
+    resetTextarea(dom.analysisInput);
+    clearAnalysisDraft();
+  }
 
+  clearAnalysisModalHideTimer();
   hideIntroActions();
   show(dom.analysisModal);
-
-  // reset animation state
   dom.analysisModal.classList.remove('is-visible');
 
   appState.phase = 'analysis-modal-open';
@@ -784,21 +836,24 @@ function openAnalysisModal({ reset = false } = {}) {
   scrollIntoViewCentered(dom.analysisModal);
 
   requestAnimationFrame(() => {
-    // trigger animation
     dom.analysisModal.classList.add('is-visible');
-
     dom.analysisInput?.focus();
   });
 }
 
 function closeAnalysisModal() {
-  hide(dom.analysisModal);
+  dom.analysisModal.classList.remove('is-visible');
+
+  clearAnalysisModalHideTimer();
+  appState.analysisModalHideTimer = setTimeout(() => {
+    hide(dom.analysisModal);
+  }, ANALYSIS_MODAL_FADE_MS);
 
   if (appState.phase === 'analysis-modal-open') {
     appState.phase = appState.activeAnalysisContent ? 'analysis-loaded' : 'idle';
   }
 
-  if (!hasStartedAnalysisSession()) {
+  if (!hasMeaningfulProgress()) {
     showIntroActions({ animate: false });
   } else {
     hideIntroActions();
@@ -826,6 +881,8 @@ function hardResetAnalysisState() {
   } catch {}
 
   clearPersistedSession();
+  clearAnalysisDraft();
+  clearAnalysisModalHideTimer();
 
   appState.phase = 'idle';
   appState.activeAnalysisPrompt = '';
@@ -843,6 +900,7 @@ function hardResetAnalysisState() {
   resetTextarea(dom.analysisInput);
   resetTextarea(dom.chatInput);
 
+  dom.analysisModal?.classList.remove('is-visible');
   hide(dom.analysisModal);
   hide(dom.analysisFrame);
   hide(dom.chatModal);
@@ -1072,6 +1130,8 @@ async function submitAnalysisRequest() {
   const prompt = (dom.analysisInput?.value || '').trim();
   if (!prompt) return;
   if (appState.analysisAbortController) return;
+
+  clearAnalysisDraft();
 
   appState.activeAnalysisPrompt = prompt;
   appState.activeAnalysisContent = '';
@@ -1354,8 +1414,14 @@ dom.chatInput?.addEventListener('keydown', (e) => {
 
 // Auto-grow textareas
 ['input', 'change', 'paste', 'cut', 'drop'].forEach((ev) => {
-  dom.analysisInput?.addEventListener(ev, () => autoGrowTextarea(dom.analysisInput));
-  dom.chatInput?.addEventListener(ev, () => autoGrowTextarea(dom.chatInput));
+  dom.analysisInput?.addEventListener(ev, () => {
+    autoGrowTextarea(dom.analysisInput);
+    saveAnalysisDraft(dom.analysisInput?.value || '');
+  });
+
+  dom.chatInput?.addEventListener(ev, () => {
+    autoGrowTextarea(dom.chatInput);
+  });
 });
 
 // Close chat input block only
@@ -1462,6 +1528,7 @@ window.addEventListener('keydown', (e) => {
 // Initial state
 // ------------------------------------------------------------
 hide(dom.analysisModal);
+dom.analysisModal?.classList.remove('is-visible');
 hide(dom.analysisFrame);
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
@@ -1473,10 +1540,11 @@ closeChatExamplesModal();
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
 
-const restored = restoreSession();
+const restoredAnalysis = restoreSession();
+const restoredDraft = restoredAnalysis ? false : restoreDraftProgress();
 
-if (!restored) {
-  showIntroActions({ animate: !hasPlayedIntroAnimationThisSession() });
+if (!restoredAnalysis && !restoredDraft) {
+  showIntroActions({ animate: true });
 } else {
   hideIntroActions();
 }
