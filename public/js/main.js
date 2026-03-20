@@ -29,6 +29,10 @@
 // - intro generation does not run when there is restored progress
 // - draft analysis input is restored on refresh within the same tab
 // - analysis-report only appears once streaming actually starts
+// - analysis status now animates through:
+//   formuleert vraag -> onderzoekt documenten -> maakt rapport
+// - status icon spins while loading
+// - loading dots animate like typing
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -65,6 +69,12 @@ const INTRO_GENERATION = {
 
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
 const ANALYSIS_MODAL_FADE_MS = 150;
+
+const ANALYSIS_STATUS_SEQUENCE = [
+  { text: 'Formuleert vraag', minMs: 900 },
+  { text: 'Onderzoekt documenten', minMs: 1400 },
+  { text: 'Maakt rapport', minMs: 99999999 }
+];
 
 async function loadProjectPromptsFromServer() {
   try {
@@ -170,7 +180,12 @@ const appState = {
   scrollFadeTimer: null,
   isUserScrolling: false,
   introGenerationTimer: null,
-  analysisModalHideTimer: null
+  analysisModalHideTimer: null,
+  analysisStatusStepTimer: null,
+  analysisStatusDotsTimer: null,
+  analysisStatusIconAnimation: null,
+  analysisStatusBaseText: '',
+  analysisStatusMode: 'static'
 };
 
 // ------------------------------------------------------------
@@ -552,6 +567,162 @@ function hasMeaningfulProgress() {
 }
 
 // ------------------------------------------------------------
+// Animated analysis status
+// ------------------------------------------------------------
+function clearAnalysisStatusTimers() {
+  if (appState.analysisStatusStepTimer) {
+    clearTimeout(appState.analysisStatusStepTimer);
+    appState.analysisStatusStepTimer = null;
+  }
+
+  if (appState.analysisStatusDotsTimer) {
+    clearInterval(appState.analysisStatusDotsTimer);
+    appState.analysisStatusDotsTimer = null;
+  }
+
+  if (appState.analysisStatusIconAnimation?.cancel) {
+    appState.analysisStatusIconAnimation.cancel();
+  }
+  appState.analysisStatusIconAnimation = null;
+}
+
+function renderAnalysisStatusHtml(text, dots = '', isLoading = false) {
+  return `
+    <span style="display:inline-flex;align-items:center;gap:10px;">
+      <img
+        id="analysis-status-icon"
+        src="${STRAPLINE.iconUrl}"
+        alt=""
+        aria-hidden="true"
+        style="
+          width:16px;
+          height:16px;
+          display:inline-block;
+          transform-origin:center center;
+          flex:0 0 auto;
+        "
+      >
+      <span style="display:inline-flex;align-items:baseline;">
+        <span>${escapeHtml(text)}</span>
+        <span
+          aria-hidden="true"
+          style="
+            display:inline-block;
+            min-width:1.6em;
+            margin-left:2px;
+            letter-spacing:0.08em;
+            opacity:${isLoading ? '1' : '0.75'};
+          "
+        >${escapeHtml(dots)}</span>
+      </span>
+    </span>
+  `;
+}
+
+function restartAnalysisStatusIconSpin() {
+  const icon = document.getElementById('analysis-status-icon');
+  if (!icon || !icon.animate) return;
+
+  if (appState.analysisStatusIconAnimation?.cancel) {
+    appState.analysisStatusIconAnimation.cancel();
+  }
+
+  appState.analysisStatusIconAnimation = icon.animate(
+    [
+      { transform: 'rotate(0deg)' },
+      { transform: 'rotate(360deg)' }
+    ],
+    {
+      duration: 900,
+      iterations: Infinity,
+      easing: 'linear'
+    }
+  );
+}
+
+function setAnalysisStatusMessage(text, { loading = false } = {}) {
+  appState.analysisStatusBaseText = text;
+  appState.analysisStatusMode = loading ? 'loading' : 'static';
+
+  if (!dom.analysisStatusText) return;
+
+  dom.analysisStatusText.innerHTML = renderAnalysisStatusHtml(
+    text,
+    loading ? '.' : '',
+    loading
+  );
+
+  requestAnimationFrame(() => {
+    if (loading) {
+      restartAnalysisStatusIconSpin();
+    } else if (appState.analysisStatusIconAnimation?.cancel) {
+      appState.analysisStatusIconAnimation.cancel();
+      appState.analysisStatusIconAnimation = null;
+    }
+  });
+}
+
+function startAnalysisStatusDots() {
+  if (!dom.analysisStatusText) return;
+
+  let dotCount = 1;
+
+  clearAnalysisStatusTimers();
+  setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[0].text, { loading: true });
+
+  appState.analysisStatusDotsTimer = setInterval(() => {
+    if (appState.analysisStatusMode !== 'loading') return;
+
+    dotCount = (dotCount % 3) + 1;
+    dom.analysisStatusText.innerHTML = renderAnalysisStatusHtml(
+      appState.analysisStatusBaseText,
+      '.'.repeat(dotCount),
+      true
+    );
+    restartAnalysisStatusIconSpin();
+  }, 320);
+}
+
+function startAnalysisStatusSequence() {
+  clearAnalysisStatusTimers();
+  show(dom.analysisStatus);
+
+  let index = 0;
+
+  startAnalysisStatusDots();
+  setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[index].text, { loading: true });
+
+  const advance = () => {
+    index += 1;
+    if (index >= ANALYSIS_STATUS_SEQUENCE.length) return;
+
+    setAnalysisStatusMessage(ANALYSIS_STATUS_SEQUENCE[index].text, { loading: true });
+
+    const next = ANALYSIS_STATUS_SEQUENCE[index];
+    if (Number.isFinite(next.minMs) && next.minMs < 90000000) {
+      appState.analysisStatusStepTimer = setTimeout(advance, next.minMs);
+    }
+  };
+
+  const first = ANALYSIS_STATUS_SEQUENCE[0];
+  if (Number.isFinite(first.minMs) && first.minMs < 90000000) {
+    appState.analysisStatusStepTimer = setTimeout(advance, first.minMs);
+  }
+}
+
+function stopAnalysisStatusLoading(finalText) {
+  clearAnalysisStatusTimers();
+  setAnalysisStatusMessage(finalText, { loading: false });
+}
+
+function clearAnalysisStatusCompletely() {
+  clearAnalysisStatusTimers();
+  appState.analysisStatusBaseText = '';
+  appState.analysisStatusMode = 'static';
+  if (dom.analysisStatusText) dom.analysisStatusText.innerHTML = '';
+}
+
+// ------------------------------------------------------------
 // Session restore helpers
 // ------------------------------------------------------------
 function buildSessionSnapshot() {
@@ -597,9 +768,7 @@ function restoreSession() {
     show(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Hersteld na verversen. Je kunt verder met deze analyse.';
-  }
+  stopAnalysisStatusLoading('Hersteld na verversen. Je kunt verder met deze analyse.');
   show(dom.analysisStatus);
 
   setHtml(dom.analysisReportBody, parseMarkdown(appState.activeAnalysisContent));
@@ -895,6 +1064,7 @@ function hardResetAnalysisState() {
   clearPersistedSession();
   clearAnalysisDraft();
   clearAnalysisModalHideTimer();
+  clearAnalysisStatusCompletely();
 
   appState.phase = 'idle';
   appState.activeAnalysisPrompt = '';
@@ -925,9 +1095,6 @@ function hardResetAnalysisState() {
     hide(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = '';
-  }
   hide(dom.analysisStatus);
 
   setHtml(dom.analysisReportBody, '');
@@ -955,17 +1122,14 @@ function renderLoading(prompt) {
     show(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Bezig met bronanalyse in politieke data en trustdata...';
-  }
-  show(dom.analysisStatus);
-
   hide(dom.analysisReport);
   setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
 
   hide(dom.summaryBtn);
   hide(dom.chatModal);
+
+  startAnalysisStatusSequence();
 
   scrollMessageToTop(dom.analysisFrame);
   scheduleScrollButtonUpdate();
@@ -1017,9 +1181,7 @@ function renderDone(content, sources) {
   appState.activeAnalysisContent = content;
   appState.activeAnalysisSources = Array.isArray(sources) ? sources : [];
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.';
-  }
+  stopAnalysisStatusLoading('Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.');
   show(dom.analysisStatus);
   show(dom.analysisReport);
 
@@ -1036,10 +1198,7 @@ function renderDone(content, sources) {
 
 function renderAnalysisError(message) {
   show(dom.analysisReport);
-
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'De analyse kon niet worden voltooid.';
-  }
+  stopAnalysisStatusLoading('De analyse kon niet worden voltooid.');
   show(dom.analysisStatus);
 
   setHtml(dom.analysisReportBody, `
@@ -1548,9 +1707,11 @@ hide(dom.analysisReport);
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
+hide(dom.analysisStatus);
 closeConfirmModal();
 closeAnalysisExamplesModal();
 closeChatExamplesModal();
+clearAnalysisStatusCompletely();
 
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
