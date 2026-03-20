@@ -1341,6 +1341,7 @@ x§
   line-height: 0.95;
   max-width: 760px;
   color: var(--black);
+  opacity: 0;
 }
 
 .intro-text {
@@ -1349,6 +1350,7 @@ x§
   font-size: 17px;
   line-height: 1.7;
   margin-bottom: 28px;
+  opacity: 0;
 }
 
 .intro-actions {
