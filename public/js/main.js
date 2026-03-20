@@ -28,9 +28,8 @@
 // - intro generation runs on fresh page load
 // - intro generation does not run when there is restored progress
 // - draft analysis input is restored on refresh within the same tab
+// - analysis-report only appears once streaming actually starts
 // ------------------------------------------------------------
-
-
 
 import { enforceRole } from '/js/auth_guard.js';
 import { initSiteRouter } from '/js/siteRouter.js';
@@ -66,7 +65,6 @@ const INTRO_GENERATION = {
 
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';
 const ANALYSIS_MODAL_FADE_MS = 150;
-
 
 async function loadProjectPromptsFromServer() {
   try {
@@ -126,6 +124,7 @@ const dom = {
   analysisRequestPill: document.getElementById('analysis-request-pill'),
   analysisStatus: document.getElementById('analysis-status'),
   analysisStatusText: document.getElementById('analysis-status-text'),
+  analysisReport: document.getElementById('analysis-report'),
   analysisReportBody: document.getElementById('analysis-report-body'),
   analysisSources: document.getElementById('analysis-sources'),
   summaryBtn: document.getElementById('summary-btn'),
@@ -303,6 +302,10 @@ function scrollElementIntoViewWithinRoot(el, block = 'center') {
 
     if (block === 'center') {
       targetTop = targetTop - (root.clientHeight / 2) + (elRect.height / 2);
+    }
+
+    if (block === 'start') {
+      targetTop = targetTop - 16;
     }
 
     root.scrollTo({
@@ -586,6 +589,7 @@ function restoreSession() {
 
   hideIntroActions();
   show(dom.analysisFrame);
+  show(dom.analysisReport);
   show(dom.newAnalysisSection);
 
   if (dom.analysisRequestPill && appState.activeAnalysisPrompt) {
@@ -840,7 +844,6 @@ function openAnalysisModal({ reset = false } = {}) {
   scrollIntoViewCentered(dom.analysisModal);
 
   requestAnimationFrame(() => {
-    // Force the browser to register the hidden state first
     void dom.analysisModal.offsetHeight;
 
     requestAnimationFrame(() => {
@@ -849,7 +852,6 @@ function openAnalysisModal({ reset = false } = {}) {
     });
   });
 }
-
 
 function closeAnalysisModal() {
   dom.analysisModal.classList.remove('is-visible');
@@ -913,6 +915,7 @@ function hardResetAnalysisState() {
   dom.analysisModal?.classList.remove('is-visible');
   hide(dom.analysisModal);
   hide(dom.analysisFrame);
+  hide(dom.analysisReport);
   hide(dom.chatModal);
   hide(dom.newAnalysisSection);
   hide(dom.summaryBtn);
@@ -957,15 +960,10 @@ function renderLoading(prompt) {
   }
   show(dom.analysisStatus);
 
-  setHtml(dom.analysisReportBody, `
-    <div class="eyebrow">
-      <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
-      <span>Policy en trust rapport</span>
-    </div>
-    <p>Analyse wordt gegenereerd...</p>
-  `);
-
+  hide(dom.analysisReport);
+  setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
+
   hide(dom.summaryBtn);
   hide(dom.chatModal);
 
@@ -974,6 +972,8 @@ function renderLoading(prompt) {
 }
 
 function renderStreamingStart() {
+  show(dom.analysisReport);
+
   setHtml(dom.analysisReportBody, `
     <div class="eyebrow">
       <img src="${STRAPLINE.iconUrl}" alt="" class="eyebrow-icon">
@@ -981,6 +981,7 @@ function renderStreamingStart() {
     </div>
     <div id="analysis-stream-content"></div>
   `);
+
   scheduleScrollButtonUpdate();
 }
 
@@ -1020,6 +1021,7 @@ function renderDone(content, sources) {
     dom.analysisStatusText.textContent = 'Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.';
   }
   show(dom.analysisStatus);
+  show(dom.analysisReport);
 
   updateAnalysisStream(content);
   renderSources(appState.activeAnalysisSources);
@@ -1033,6 +1035,8 @@ function renderDone(content, sources) {
 }
 
 function renderAnalysisError(message) {
+  show(dom.analysisReport);
+
   if (dom.analysisStatusText) {
     dom.analysisStatusText.textContent = 'De analyse kon niet worden voltooid.';
   }
@@ -1540,6 +1544,7 @@ window.addEventListener('keydown', (e) => {
 hide(dom.analysisModal);
 dom.analysisModal?.classList.remove('is-visible');
 hide(dom.analysisFrame);
+hide(dom.analysisReport);
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
