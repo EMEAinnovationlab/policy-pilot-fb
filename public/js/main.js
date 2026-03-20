@@ -29,12 +29,13 @@
 // - intro generation does not run when there is restored progress
 // - draft analysis input is restored on refresh within the same tab
 // - analysis-report only appears once streaming actually starts
-// - loading animation now lives in the analysis-report eyebrow
-// - eyebrow icon spins while loading
-// - eyebrow text cycles through:
+// - report eyebrow handles loading animation
+// - report eyebrow icon spins while loading
+// - report eyebrow text cycles through:
 //   formuleert vraag -> onderzoekt documenten -> maakt rapport
 // - report body stays empty until first streamed words arrive
 // - loading eyebrow stops immediately on first token
+// - old analysis-status lifecycle is no longer used
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -751,11 +752,6 @@ function restoreSession() {
     show(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Hersteld na verversen. Je kunt verder met deze analyse.';
-  }
-  show(dom.analysisStatus);
-
   setHtml(dom.analysisReportBody, `
     <div id="analysis-report-eyebrow">
       ${renderReportEyebrow('Policy en trust rapport')}
@@ -1086,11 +1082,6 @@ function hardResetAnalysisState() {
     hide(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = '';
-  }
-  hide(dom.analysisStatus);
-
   setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
   setHtml(dom.analysisFollowupThread, '');
@@ -1116,9 +1107,6 @@ function renderLoading(prompt) {
     show(dom.analysisRequestPill);
   }
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = '';
-  }
   hide(dom.analysisStatus);
 
   hide(dom.analysisReport);
@@ -1181,10 +1169,6 @@ function renderDone(content, sources) {
   appState.activeAnalysisContent = content;
   appState.activeAnalysisSources = Array.isArray(sources) ? sources : [];
 
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'Analyse voltooid. Je kunt nu verder vragen op basis van dit rapport.';
-  }
-  show(dom.analysisStatus);
   show(dom.analysisReport);
 
   stopReportEyebrowLoadingToDefault();
@@ -1201,11 +1185,6 @@ function renderDone(content, sources) {
 
 function renderAnalysisError(message) {
   show(dom.analysisReport);
-
-  if (dom.analysisStatusText) {
-    dom.analysisStatusText.textContent = 'De analyse kon niet worden voltooid.';
-  }
-  show(dom.analysisStatus);
 
   stopReportEyebrowLoadingToDefault();
 
