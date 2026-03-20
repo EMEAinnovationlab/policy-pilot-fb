@@ -1340,12 +1340,12 @@ x§
   font-weight: 500;
   line-height: 0.95;
   max-width: 760px;
-  color: var(--black);
+  color: var(--white);
 }
 
 .intro-text {
   max-width: 760px;
-  color: var(--black);
+  color: var(--white);
   font-size: 17px;
   line-height: 1.7;
   margin-bottom: 28px;
@@ -1952,6 +1952,7 @@ x§
   transition:
     opacity 0.18s ease,
     visibility 0s linear 0.18s;
+    color: var(--white);
 }
 
 .analysis-modal.is-visible {
@@ -1961,6 +1962,7 @@ x§
   transition:
     opacity 0.18s ease,
     visibility 0s linear 0s;
+    color: var(--black);
 }
 
 .analysis-modal__inner {
@@ -1969,6 +1971,7 @@ x§
   transition:
     opacity 0.18s ease,
     visibility 0s linear 0.18s;
+    color: var(--white);
 }
 
 .analysis-modal.is-visible .analysis-modal__inner {
@@ -1977,4 +1980,5 @@ x§
   transition:
     opacity 0.18s ease,
     visibility 0s linear 0s;
+    color: var(--black);
 }
