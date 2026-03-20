@@ -1954,7 +1954,7 @@ x§
 }
 
 .analysis-modal.is-visible {
-  opacity: 1;
+  opacity: 1!important;
   pointer-events: auto;
 }
 
@@ -1964,5 +1964,5 @@ x§
 }
 
 .analysis-modal.is-visible .analysis-modal__inner {
-  opacity: 1;
+  opacity: 1!important;
 }
