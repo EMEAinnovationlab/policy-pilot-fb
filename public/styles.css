@@ -1340,17 +1340,17 @@ x§
   font-weight: 500;
   line-height: 0.95;
   max-width: 760px;
-  opacity: 0;
-  /* color: var(--white); */
+  /* opacity: 0; */
+  color: var(--white);
 }
 
 .intro-text {
   max-width: 760px;
-  /* color: var(--white); */
+  color: var(--white);
   font-size: 17px;
   line-height: 1.7;
   margin-bottom: 28px;
-  opacity: 0;
+  /* opacity: 0; */
 }
 
 .intro-actions {
@@ -1875,6 +1875,7 @@ x§
 .generated-word {
   display: inline-block;
   opacity: 0;
+  color: black!important;
   will-change: opacity, transform, filter;
   animation: generatedWordIn 0.45s ease forwards;
 }
