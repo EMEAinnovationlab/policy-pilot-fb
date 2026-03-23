@@ -2019,11 +2019,12 @@ justify-content: center;
   box-shadow: var(--shadow-bg-drop-speech);
   border-radius: 999px;
   color: var(--black);
+    padding: 5px!important;
+  padding-right: 5px!important;
+  padding-top: 15px!important;
+  padding-bottom: 15px!important;
 }
 
 .msg-user-msg-user-text {
-  margin-left: 5px!important;
-  margin-right: 5px!important;
-  margin-top: 15px!important;
-  margin-bottom: 15px!important;
+
 }
