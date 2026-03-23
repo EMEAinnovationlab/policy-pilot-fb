@@ -2005,10 +2005,15 @@ x§
 .msg-user-wrapper {
  height: 200px; 
  display: flex;
+ flex-direction: column;
 align-items: flex-end;
 }
 
 
-.msg-user-wrapper {
+
+
+
+.msg-user-chatbubble {
   border: 1px solid var(--dark-brown);
+
 }
