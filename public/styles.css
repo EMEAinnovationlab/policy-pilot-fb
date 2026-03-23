@@ -1591,10 +1591,14 @@ x§
   position: relative;
 }
 
+.chat-modal-title {
+
+}
+
 .chat-modal__tag {
   position: absolute;
   left: 24px;
-  top: -15px;
+  top: 15px;
   background: var(--PublicMatters-blue);
   color: var(--white);
   border-radius: 999px;
@@ -1611,6 +1615,7 @@ x§
   top: 14px;
   font-size: 24px;
   color: var(--medium-dark-brown);
+  display: none;
 }
 
 .chat-modal__title {
@@ -1620,6 +1625,7 @@ x§
   /* font-size: clamp(30px, 3vw, 44px); */
   line-height: 1;
   color: var(--black);
+  font-size: 32px;
 }
 
 .chat-modal__text {
