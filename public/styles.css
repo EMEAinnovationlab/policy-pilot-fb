@@ -1549,8 +1549,8 @@ x§
   box-shadow: var(--shadow-bg-drop);
   /* border: 1px solid rgba(202, 143, 46, 0.55); */
   color: var(--black);
-      width: 115%;
-    margin-left: -7.5%;
+      width: 125%;
+    margin-left: -12.5%;
     margin-top: 5%;
 }
 
@@ -1583,7 +1583,7 @@ x§
 
 /***** Scoped follow-up chat *****/
 .chat-modal {
-  margin-top: 34px;
+  margin-top: 100px;
   background: var(--white-dark);
   border: 1px solid rgba(202, 143, 46, 0.45);
   border-radius: 28px;
@@ -1672,13 +1672,14 @@ x§
   width: min(720px, 100%);
   margin-top: 20vh;
   margin-bottom: 20vh;
+  margin-left: 10vh;
   
 }
 
 .new-analysis-section h2 {
   margin: 0 0 10px;
   font-family: var(--font-serif);
-  /* font-size: 52px; */
+  font-size: 32px;
   line-height: 1;
   color: var(--black);
   font-weight: 500;
