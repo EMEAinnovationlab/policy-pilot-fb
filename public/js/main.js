@@ -37,6 +37,7 @@
 // - loading eyebrow stops immediately on first token
 // - old analysis-status lifecycle is no longer used
 // - sources are kept in state but never shown in the UI
+// - new-analysis-section only appears after the full report is complete
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -1103,7 +1104,6 @@ function hardResetAnalysisState() {
 // ------------------------------------------------------------
 function renderLoading(prompt) {
   show(dom.analysisFrame);
-  show(dom.newAnalysisSection);
 
   if (dom.analysisRequestPill) {
     dom.analysisRequestPill.textContent = prompt;
@@ -1119,6 +1119,7 @@ function renderLoading(prompt) {
 
   hide(dom.summaryBtn);
   hide(dom.chatModal);
+  hide(dom.newAnalysisSection);
 
   scrollMessageToTop(dom.analysisFrame);
   scheduleScrollButtonUpdate();
@@ -1198,6 +1199,7 @@ function renderAnalysisError(message) {
   hide(dom.analysisSources);
   hide(dom.summaryBtn);
   hide(dom.chatModal);
+  hide(dom.newAnalysisSection);
 
   scheduleScrollButtonUpdate();
 }
