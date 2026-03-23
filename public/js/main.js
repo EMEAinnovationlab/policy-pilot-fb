@@ -36,6 +36,7 @@
 // - report body stays empty until first streamed words arrive
 // - loading eyebrow stops immediately on first token
 // - old analysis-status lifecycle is no longer used
+// - sources are kept in state but never shown in the UI
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -759,7 +760,8 @@ function restoreSession() {
     <div id="analysis-stream-content">${parseMarkdown(appState.activeAnalysisContent)}</div>
   `);
 
-  renderSources(appState.activeAnalysisSources);
+  setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
 
   show(dom.summaryBtn);
   show(dom.chatModal);
@@ -1084,6 +1086,7 @@ function hardResetAnalysisState() {
 
   setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
   setHtml(dom.analysisFollowupThread, '');
 
   closeAnalysisExamplesModal();
@@ -1112,6 +1115,7 @@ function renderLoading(prompt) {
   hide(dom.analysisReport);
   setHtml(dom.analysisReportBody, '');
   setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
 
   hide(dom.summaryBtn);
   hide(dom.chatModal);
@@ -1148,20 +1152,12 @@ function renderSources(sources) {
 
   if (!Array.isArray(sources) || !sources.length) {
     setHtml(dom.analysisSources, '');
+    hide(dom.analysisSources);
     return;
   }
 
-  setHtml(dom.analysisSources, `
-    <h3>Bronnen</h3>
-    <ul class="analysis-sources__list">
-      ${sources.map((src) => `
-        <li class="analysis-sources__item">
-          <span class="analysis-sources__n">[#${escapeHtml(src.n)}]</span>
-          <span class="analysis-sources__title">${escapeHtml(src.title || 'Bron')}</span>
-        </li>
-      `).join('')}
-    </ul>
-  `);
+  setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
 }
 
 function renderDone(content, sources) {
@@ -1173,7 +1169,9 @@ function renderDone(content, sources) {
 
   stopReportEyebrowLoadingToDefault();
   updateAnalysisStream(content);
-  renderSources(appState.activeAnalysisSources);
+
+  setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
 
   show(dom.summaryBtn);
   show(dom.newAnalysisSection);
@@ -1197,6 +1195,7 @@ function renderAnalysisError(message) {
   `);
 
   setHtml(dom.analysisSources, '');
+  hide(dom.analysisSources);
   hide(dom.summaryBtn);
   hide(dom.chatModal);
 
@@ -1705,6 +1704,7 @@ hide(dom.chatModal);
 hide(dom.newAnalysisSection);
 hide(dom.summaryBtn);
 hide(dom.analysisStatus);
+hide(dom.analysisSources);
 closeConfirmModal();
 closeAnalysisExamplesModal();
 closeChatExamplesModal();
