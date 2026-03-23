@@ -1893,6 +1893,7 @@ x§
   opacity: 0;
   will-change: opacity, transform, filter;
   animation: generatedWordIn 0.45s ease forwards;
+  margin-right: -2px;
 }
 
 .generated-space {
