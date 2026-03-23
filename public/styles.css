@@ -49,6 +49,7 @@
 
   /* Effects */
     --shadow-bg-drop: 1px 4px 90px 0 rgba(233, 182, 97, 0.26);
+     --shadow-bg-drop-speech: 1px 4px 90px 0 rgba(233, 183, 97, 0.467);
     --shadow-bg-drop-suttle: 1px 2px 40px 0 rgba(233, 183, 97, 0.126);}
 
 /***** Base / Reset *****/
@@ -1518,7 +1519,7 @@ x§
   max-width: 100%;
   margin: 0 auto 75px;
   background: var(--white);
-  box-shadow: var(--shadow-bg-drop);
+  box-shadow: var(--shadow-bg-drop-speech);
   border-radius: 999px;
 
   padding: 16px 24px;
@@ -1527,6 +1528,7 @@ x§
   line-height: 1.5;
   position: relative;
   right: -4.5vw;
+  z-index: 100;
 }
 
 .analysis-status {
