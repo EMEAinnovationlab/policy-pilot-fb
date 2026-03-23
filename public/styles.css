@@ -2019,6 +2019,6 @@ justify-content: center;
   box-shadow: var(--shadow-bg-drop-speech);
   border-radius: 999px;
 
-  padding: 16px 24px;
+  padding: 16px 0px;
   color: var(--black);
 }
