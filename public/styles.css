@@ -1670,7 +1670,9 @@ x§
 /***** New analysis section *****/
 .new-analysis-section {
   width: min(720px, 100%);
-  margin: 70px auto 0;
+  margin-top: 20vh;
+  margin-bottom: 20vh;
+  
 }
 
 .new-analysis-section h2 {

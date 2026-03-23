@@ -38,6 +38,8 @@
 // - old analysis-status lifecycle is no longer used
 // - sources are kept in state but never shown in the UI
 // - new-analysis-section only appears after the full report is complete
+// - user messages now render as:
+//   div.msg-user-wrapper > div.msg-user-chatbubble > p.msg-user-text
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -772,7 +774,11 @@ function restoreSession() {
     if (!msg || typeof msg.content !== 'string') continue;
 
     if (msg.role === 'user') {
-      appendFollowupMessage('user', `<p>${escapeHtml(msg.content)}</p>`, false);
+      appendFollowupMessage(
+        'user',
+        `<p class="msg-user-text">${escapeHtml(msg.content)}</p>`,
+        false
+      );
     } else if (msg.role === 'assistant') {
       appendFollowupMessage(
         'assistant',
@@ -1351,8 +1357,19 @@ function appendFollowupMessage(role, html, shouldScroll = true) {
   if (!dom.analysisFollowupThread) return null;
 
   const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  div.innerHTML = html;
+
+  if (role === 'user') {
+    div.className = 'msg-user-wrapper';
+    div.innerHTML = `
+      <div class="msg-user-chatbubble">
+        ${html}
+      </div>
+    `;
+  } else {
+    div.className = `msg ${role}`;
+    div.innerHTML = html;
+  }
+
   dom.analysisFollowupThread.appendChild(div);
 
   if (shouldScroll) {
@@ -1369,7 +1386,10 @@ async function submitFollowupQuestion() {
   if (!appState.activeAnalysisContent) return;
   if (appState.analysisAbortController) return;
 
-  appendFollowupMessage('user', `<p>${escapeHtml(prompt)}</p>`);
+  appendFollowupMessage(
+    'user',
+    `<p class="msg-user-text">${escapeHtml(prompt)}</p>`
+  );
   resetTextarea(dom.chatInput);
 
   appState.followupHistory.push({
