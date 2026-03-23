@@ -40,6 +40,7 @@
 // - new-analysis-section only appears after the full report is complete
 // - user messages now render as:
 //   div.msg-user-wrapper > div.msg-user-chatbubble > p.msg-user-text
+// - new-analysis-section gets an in-view class every time it enters viewport
 // ------------------------------------------------------------
 
 import { enforceRole } from '/js/auth_guard.js';
@@ -194,7 +195,9 @@ const appState = {
   reportEyebrowIconAnimation: null,
   reportEyebrowBaseText: '',
   reportEyebrowLoading: false,
-  reportFirstTokenSeen: false
+  reportFirstTokenSeen: false,
+
+  newAnalysisSectionObserver: null
 };
 
 // ------------------------------------------------------------
@@ -573,6 +576,44 @@ function hasMeaningfulProgress() {
     hasStartedAnalysisSession() ||
     hasDraftAnalysisRequest()
   );
+}
+
+// ------------------------------------------------------------
+// New analysis section viewport animation
+// ------------------------------------------------------------
+function setupNewAnalysisSectionViewportAnimation() {
+  const el = dom.newAnalysisSection;
+  if (!el || typeof IntersectionObserver === 'undefined') return;
+
+  if (appState.newAnalysisSectionObserver) {
+    appState.newAnalysisSectionObserver.disconnect();
+    appState.newAnalysisSectionObserver = null;
+  }
+
+  const scrollRoot = getScrollRoot();
+  const observerRoot = scrollRoot === window ? null : scrollRoot;
+
+  appState.newAnalysisSectionObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          el.classList.add('in-view');
+        } else {
+          el.classList.remove('in-view');
+        }
+      });
+    },
+    {
+      root: observerRoot,
+      threshold: 0.15
+    }
+  );
+
+  appState.newAnalysisSectionObserver.observe(el);
+}
+
+function resetNewAnalysisSectionAnimation() {
+  dom.newAnalysisSection?.classList.remove('in-view');
 }
 
 // ------------------------------------------------------------
@@ -1084,6 +1125,7 @@ function hardResetAnalysisState() {
   hide(dom.analysisReport);
   hide(dom.chatModal);
   hide(dom.newAnalysisSection);
+  resetNewAnalysisSectionAnimation();
   hide(dom.summaryBtn);
 
   if (dom.analysisRequestPill) {
@@ -1126,6 +1168,7 @@ function renderLoading(prompt) {
   hide(dom.summaryBtn);
   hide(dom.chatModal);
   hide(dom.newAnalysisSection);
+  resetNewAnalysisSectionAnimation();
 
   scrollMessageToTop(dom.analysisFrame);
   scheduleScrollButtonUpdate();
@@ -1206,6 +1249,7 @@ function renderAnalysisError(message) {
   hide(dom.summaryBtn);
   hide(dom.chatModal);
   hide(dom.newAnalysisSection);
+  resetNewAnalysisSectionAnimation();
 
   scheduleScrollButtonUpdate();
 }
@@ -1724,6 +1768,7 @@ hide(dom.analysisFrame);
 hide(dom.analysisReport);
 hide(dom.chatModal);
 hide(dom.newAnalysisSection);
+resetNewAnalysisSectionAnimation();
 hide(dom.summaryBtn);
 hide(dom.analysisStatus);
 hide(dom.analysisSources);
@@ -1734,6 +1779,8 @@ clearReportEyebrowState();
 
 resetTextarea(dom.analysisInput);
 resetTextarea(dom.chatInput);
+
+setupNewAnalysisSectionViewportAnimation();
 
 const restoredAnalysis = restoreSession();
 const restoredDraft = restoredAnalysis ? false : restoreDraftProgress();
