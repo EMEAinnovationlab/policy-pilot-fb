@@ -1547,7 +1547,7 @@ x§
   border-radius: 28px;
   padding: 60px 70px;
   box-shadow: var(--shadow-bg-drop);
-  border: 1px solid rgba(202, 143, 46, 0.55);
+  /* border: 1px solid rgba(202, 143, 46, 0.55); */
   color: var(--black);
       width: 115%;
     margin-left: -7.5%;
@@ -2019,7 +2019,7 @@ justify-content: center;
   box-shadow: var(--shadow-bg-drop-speech);
   border-radius: 999px;
   color: var(--black);
-  padding-left: 100px;
-  padding-right: 100px;
+  padding-left: 25px;
+  padding-right: 25px;
 }
 
