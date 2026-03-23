@@ -1521,13 +1521,13 @@ x§
   box-shadow: var(--shadow-bg-drop);
   border-radius: 999px;
 
-  border: 1px solid var(--center-color-white);
+  border: 1px solid var(--medium-light-brown);
   padding: 16px 24px;
   color: var(--black);
   font-size: 16px;
   line-height: 1.5;
   position: relative;
-  right: -20vw;
+  right: -5vw;
 }
 
 .analysis-status {
