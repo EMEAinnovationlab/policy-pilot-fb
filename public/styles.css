@@ -1993,3 +1993,8 @@ x§
     opacity 0.18s ease,
     visibility 0s linear 0s;
 }
+
+
+#summary-btn {
+  display: none;
+}
