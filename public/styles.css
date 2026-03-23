@@ -2022,8 +2022,8 @@ justify-content: center;
 }
 
 .msg-user-msg-user-text {
-  margin-left: 5px;
-  margin-right: 5px;
-  margin-top: 15px;
-  margin-bottom: 15px;
+  margin-left: 5px!important;
+  margin-right: 5px!important;
+  margin-top: 15px!important;
+  margin-bottom: 15px!important;
 }
