@@ -1554,6 +1554,10 @@ x§
     margin-top: 5%;
 }
 
+.analysis-report__body {
+  margin-bottom: 10vh;
+}
+
 
 .analysis-report h1,
 .analysis-report h2,
