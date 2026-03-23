@@ -2000,3 +2000,15 @@ x§
 #summary-btn {
   display: none;
 }
+
+
+.msg-user-wrapper {
+ height: 200px; 
+ display: flex;
+align-items: flex-end;
+}
+
+
+.msg-user-wrapper {
+  border: 1px solid var(--dark-brown);
+}
