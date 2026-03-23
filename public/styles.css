@@ -1520,12 +1520,14 @@ x§
   background: var(--white);
   box-shadow: var(--shadow-bg-drop);
   border-radius: 999px;
-  border-color: #F8D69D;
-  border-width: 1px;
+
+  border: 1px solid var(--center-color-white);
   padding: 16px 24px;
   color: var(--black);
   font-size: 16px;
   line-height: 1.5;
+  position: relative;
+  right: -20vw;
 }
 
 .analysis-status {
