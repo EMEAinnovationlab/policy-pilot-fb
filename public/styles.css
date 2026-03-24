@@ -1443,7 +1443,7 @@ x§
 .analysis-composer__input,
 .chat-composer__input {
   width: 100%;
-  min-height: 56px;
+  min-height: 86px;
   max-height: 220px;
   resize: vertical;
   overflow-y: auto;
