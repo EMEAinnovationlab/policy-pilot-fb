@@ -1412,6 +1412,7 @@ x§
   right: 18px;
   top: 16px;
   font-size: 24px;
+  display: none;
   color: var(--medium-dark-brown);
 }
 
