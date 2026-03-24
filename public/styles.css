@@ -1445,10 +1445,10 @@ x§
   width: 100%;
   min-height: 56px;
   max-height: 220px;
-  resize: none;
+  resize: vertical;
   overflow-y: auto;
   border: 1px solid var(--white-dark);
-  border-radius: 999px;
+  border-radius: 20px;
   background: var(--white);
   box-shadow: var(--shadow-bg-drop-suttle);
   padding: 16px 22px;
