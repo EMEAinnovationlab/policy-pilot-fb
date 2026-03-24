@@ -16,9 +16,32 @@ export function initSiteRouter({
 
   const pagesOrder = ['about', 'how', 'data'];
 
-  let markedRef = (typeof window !== 'undefined' && window.marked) ? window.marked : null;
-  const parseMarkdown = (md) => (markedRef ? markedRef.parse(md || '') : (md || ''));
+  // ------------------------------------------------------------
+  // Markdown + safety layer
+  // ------------------------------------------------------------
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
+  const parseMarkdown = (md) => {
+    const source = String(md ?? '');
+
+    // Preferred path: use marked
+    if (typeof window !== 'undefined' && window.marked?.parse) {
+      return window.marked.parse(source);
+    }
+
+    // Fallback: safe plain text rendering
+    return escapeHtml(source).replace(/\n/g, '<br>');
+  };
+
+  // ------------------------------------------------------------
+  // Modal control
+  // ------------------------------------------------------------
   function setModalOpen(open) {
     if (!modal) return;
     modal.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -40,6 +63,9 @@ export function initSiteRouter({
     });
   }
 
+  // ------------------------------------------------------------
+  // Data table renderer
+  // ------------------------------------------------------------
   function renderIncludedDataTable(rows) {
     if (!rows || rows.length === 0) {
       return '<p class="muted">No documents found.</p>';
@@ -56,7 +82,13 @@ export function initSiteRouter({
       });
     };
 
-    const esc = (v) => (v ?? '').toString().replace(/</g, '&lt;');
+    const esc = (v) =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     const body = rows.map((r) => `
       <tr>
@@ -68,12 +100,21 @@ export function initSiteRouter({
 
     return `
       <table class="pp-table">
-        <thead><tr><th>Bron</th><th>Data van</th><th>Upload datum</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Bron</th>
+            <th>Data van</th>
+            <th>Upload datum</th>
+          </tr>
+        </thead>
         <tbody>${body}</tbody>
       </table>
     `;
   }
 
+  // ------------------------------------------------------------
+  // Page loader
+  // ------------------------------------------------------------
   async function loadSitePage(page) {
     const lang = (navigator.language || 'en').toLowerCase();
 
@@ -84,6 +125,9 @@ export function initSiteRouter({
     if (modalContent) modalContent.innerHTML = '<p class="muted">Loading...</p>';
 
     try {
+      // ------------------------
+      // DATA PAGE (Markdown + table)
+      // ------------------------
       if (page === 'data') {
         const [contentRes, listRes] = await Promise.all([
           fetch(`/api/site-content?page=data&lang=${encodeURIComponent(lang)}`),
@@ -103,8 +147,19 @@ export function initSiteRouter({
 
         const introHTML = parseMarkdown(contentJson.content || '');
         const tableHTML = renderIncludedDataTable(listJson.items || []);
-        modalContent.innerHTML = `<div class="pp-context-intro">${introHTML}</div>${tableHTML}`;
-      } else {
+
+        modalContent.innerHTML = `
+          <div class="pp-context-intro">
+            ${introHTML}
+          </div>
+          ${tableHTML}
+        `;
+      }
+
+      // ------------------------
+      // NORMAL PAGES (Markdown only)
+      // ------------------------
+      else {
         const r = await fetch(`/api/site-content?page=${encodeURIComponent(page)}&lang=${encodeURIComponent(lang)}`);
         const j = await r.json();
 
@@ -112,15 +167,26 @@ export function initSiteRouter({
           throw new Error(j?.error || `Failed to load ${page}`);
         }
 
-        modalContent.innerHTML = parseMarkdown(j.content || '');
+        const html = parseMarkdown(j.content || '');
+        modalContent.innerHTML = html;
       }
 
-      document.querySelector('.pp-modal__nav .pp-navbtn.is-active')?.focus();
+      document
+        .querySelector('.pp-modal__nav .pp-navbtn.is-active')
+        ?.focus();
+
     } catch (err) {
-      modalContent.innerHTML = `<p style="color:#b10000">${String(err.message || err)}</p>`;
+      modalContent.innerHTML = `
+        <p style="color:#b10000">
+          ${escapeHtml(String(err.message || err))}
+        </p>
+      `;
     }
   }
 
+  // ------------------------------------------------------------
+  // Routing
+  // ------------------------------------------------------------
   function routeFromHash() {
     const h = (location.hash || '').toLowerCase().replace('#', '');
     if (['about', 'how', 'data'].includes(h)) {
@@ -128,6 +194,9 @@ export function initSiteRouter({
     }
   }
 
+  // ------------------------------------------------------------
+  // Events
+  // ------------------------------------------------------------
   modal?.addEventListener('click', (e) => {
     if (e.target.matches('[data-close], .pp-modal__backdrop')) closeModal();
   });
@@ -155,11 +224,13 @@ export function initSiteRouter({
       navButtons.find((b) => b.classList.contains('is-active'))?.dataset.page || pagesOrder[0];
 
     let idx = pagesOrder.indexOf(current);
+
     idx = e.key === 'ArrowRight'
       ? (idx + 1) % pagesOrder.length
       : (idx - 1 + pagesOrder.length) % pagesOrder.length;
 
     const page = pagesOrder[idx];
+
     history.pushState(null, '', `#${page}`);
     loadSitePage(page);
   });

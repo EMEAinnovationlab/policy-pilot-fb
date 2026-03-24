@@ -1791,4 +1791,4 @@ if (!restoredAnalysis && !restoredDraft) {
   hideIntroActions();
 }
 
-scheduleScrollButtonUpdate();
+scheduleScrollButtonUpdate();3
