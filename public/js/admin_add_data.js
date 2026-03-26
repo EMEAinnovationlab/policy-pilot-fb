@@ -1,166 +1,258 @@
-// /js/admin_add_data.js
-import { enforceRole } from '/js/auth_guard.js';
-import { applyProjectSettings } from '/js/project_settings.js';
+const crypto = require('crypto');
+const Busboy = require('busboy');
+const XLSX = require('xlsx');
+const { parse: csvParse } = require('csv-parse/sync');
+const OpenAI = require('openai');
+const { supabaseRest } = require('../lib/supabase');
+const {
+  OPENAI_API_KEY
+} = require('../config/env');
 
-await enforceRole({ requiredRole: 'admin' });
-applyProjectSettings().catch(() => {});
+const EMBED_MODEL = 'text-embedding-3-small';
 
-const els = {
-  form: document.getElementById('ingest-form'),
-  file: document.getElementById('file'),
-  doc_name: document.getElementById('doc_name'),        // REQUIRED: used as the document name
-  uploaded_by: document.getElementById('uploaded_by'),  // REQUIRED: used for every row
-  previewWrap: document.getElementById('preview'),
-  previewMeta: document.getElementById('preview-meta'),
-  previewTable: document.getElementById('preview-table'),
-  status: document.getElementById('status'),
-  btnPreview: document.getElementById('btn-preview'),
-  btnUpload: document.getElementById('btn-upload'),
-  btnDownloadPreview: document.getElementById('btn-download-preview'),
-  confirm: document.getElementById('confirm'),
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY
+});
+
+function normalizeValue(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === '' ? null : s;
+}
+
+function rowToPayload(row, idx, documentId, docName, uploadedBy, embeddings = {}) {
+  const content =
+    normalizeValue(row.content) ??
+    normalizeValue(row.samenvatting) ??
+    JSON.stringify(row);
+
+  const invloedText =
+    normalizeValue(row.invloed_text) ??
+    normalizeValue(row.invloed) ??
+    null;
+
+  return {
+    document_id: documentId,
+    doc_name: docName,
+    uploaded_by: uploadedBy,
+    chunk_index: idx,
+    datum: normalizeValue(row.datum),
+    naam: normalizeValue(row.naam) ?? normalizeValue(row.name),
+    bron: normalizeValue(row.bron),
+    link: normalizeValue(row.link),
+    invloed_text: invloedText,
+    content,
+    embedding: embeddings.embedding ?? null,
+    invloed_embedding: embeddings.invloed_embedding ?? null,
+    metadata: {
+      source: 'uploadService.js',
+      file_type: 'spreadsheet'
+    }
+  };
+}
+
+async function createEmbeddingsForRows(records) {
+  const contentInputs = records.map((row) => {
+    return (
+      normalizeValue(row.content) ??
+      normalizeValue(row.samenvatting) ??
+      JSON.stringify(row)
+    );
+  });
+
+  const invloedInputs = records.map((row) => {
+    return (
+      normalizeValue(row.invloed_text) ??
+      normalizeValue(row.invloed) ??
+      ''
+    );
+  });
+
+  const contentResponse = await openai.embeddings.create({
+    model: EMBED_MODEL,
+    input: contentInputs
+  });
+
+  const invloedResponse = await openai.embeddings.create({
+    model: EMBED_MODEL,
+    input: invloedInputs
+  });
+
+  return records.map((_, i) => ({
+    embedding: contentResponse.data[i]?.embedding ?? null,
+    invloed_embedding: invloedInputs[i].trim()
+      ? (invloedResponse.data[i]?.embedding ?? null)
+      : null
+  }));
+}
+
+function recordsToCsv(records, documentId, docName, uploadedBy) {
+  const headers = [
+    'document_id',
+    'doc_name',
+    'uploaded_by',
+    'chunk_index',
+    'datum',
+    'naam',
+    'bron',
+    'link',
+    'invloed_text',
+    'content'
+  ];
+
+  const escaped = (value) => {
+    const s = value == null ? '' : String(value);
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const rows = records.map((row, idx) => {
+    const mapped = rowToPayload(row, idx, documentId, docName, uploadedBy);
+    return headers.map((h) => escaped(mapped[h])).join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\n');
+}
+
+function handleSpreadsheetUpload(req, res) {
+  try {
+    const bb = Busboy({
+      headers: req.headers,
+      limits: { files: 1, fileSize: 25 * 1024 * 1024 }
+    });
+
+    let fileBuf = Buffer.alloc(0);
+    let filename = '';
+    const fields = {};
+
+    bb.on('file', (_name, file, info) => {
+      filename = info.filename || 'upload';
+      file.on('data', (chunk) => {
+        fileBuf = Buffer.concat([fileBuf, chunk]);
+      });
+    });
+
+    bb.on('field', (name, val) => {
+      fields[name] = val;
+    });
+
+    bb.on('finish', async () => {
+      try {
+        const lower = filename.toLowerCase();
+        const isXlsx = lower.endsWith('.xlsx');
+        const isCsv = lower.endsWith('.csv');
+
+        if (!isXlsx && !isCsv) {
+          return res.status(400).json({
+            ok: false,
+            error: 'Unsupported file type. Please upload a .xlsx or .csv file.'
+          });
+        }
+
+        const records = [];
+
+        if (isXlsx) {
+          const wb = XLSX.read(fileBuf, { type: 'buffer' });
+          const sheet = wb.SheetNames[0];
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { raw: false });
+          for (const row of rows) records.push(row);
+        } else {
+          const text = fileBuf.toString('utf8');
+          const rows = csvParse(text, {
+            columns: true,
+            skip_empty_lines: true
+          });
+          for (const row of rows) records.push(row);
+        }
+
+        const docName = (fields.doc_name || '').trim() || filename;
+        const uploadedBy = (fields.uploaded_by || '').trim() || 'admin';
+        const action = (fields.action || '').toLowerCase();
+
+        if (!records.length) {
+          return res.json({
+            ok: true,
+            mode: action || 'upload',
+            count: 0,
+            rows: [],
+            doc_name: docName
+          });
+        }
+
+        const documentId = crypto.randomUUID();
+
+        if (action === 'preview') {
+          const previewRows = records.map((row, idx) =>
+            rowToPayload(row, idx, documentId, docName, uploadedBy)
+          );
+
+          const csv = recordsToCsv(records, documentId, docName, uploadedBy);
+
+          return res.json({
+            ok: true,
+            mode: 'preview',
+            rows: previewRows.slice(0, 50),
+            total_rows: previewRows.length,
+            doc_name: docName,
+            document_id: documentId,
+            csv
+          });
+        }
+
+        if (!OPENAI_API_KEY) {
+          return res.status(500).json({
+            ok: false,
+            error: 'Missing OPENAI_API_KEY in server environment.'
+          });
+        }
+
+        const embeddingRows = await createEmbeddingsForRows(records);
+
+        const payload = records.map((row, idx) =>
+          rowToPayload(
+            row,
+            idx,
+            documentId,
+            docName,
+            uploadedBy,
+            embeddingRows[idx]
+          )
+        );
+
+        await supabaseRest('/documents', {
+          method: 'POST',
+          headers: {
+            Prefer: 'return=minimal'
+          },
+          body: payload
+        });
+
+        return res.json({
+          ok: true,
+          count: payload.length,
+          doc_name: docName,
+          document_id: documentId
+        });
+      } catch (e) {
+        console.error('Spreadsheet upload failed:', e);
+        return res.status(500).json({
+          ok: false,
+          error: e.message || String(e)
+        });
+      }
+    });
+
+    req.pipe(bb);
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      error: e.message || String(e)
+    });
+  }
+}
+
+module.exports = {
+  handleSpreadsheetUpload
 };
-
-let lastPreview = null; // { rows, document_id, csv }
-let uploading = false;
-
-function setBusy(b) {
-  els.status.textContent = b ? 'Working…' : '';
-  els.btnPreview.disabled = b;
-  els.btnUpload.disabled = b || !lastPreview || !els.confirm.checked;
-}
-
-function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;').replaceAll('<','&lt;')
-    .replaceAll('>','&gt;').replaceAll('"','&quot;');
-}
-
-function buildFormData(action) {
-  const fd = new FormData();
-  const file = els.file.files?.[0];
-  if (file) fd.append('file', file);
-  fd.append('doc_name', (els.doc_name?.value || '').trim());       // ← from form
-  fd.append('uploaded_by', (els.uploaded_by?.value || '').trim()); // ← from form
-  fd.append('action', action); // 'preview' | 'upload'
-  return fd;
-}
-
-function renderPreview(rows, document_id) {
-  if (!rows?.length) {
-    els.previewWrap.style.display = 'none';
-    return;
-  }
-  els.previewWrap.style.display = '';
-
-  const docName = rows[0]?.doc_name || '(unknown)';
-  els.previewMeta.innerHTML =
-    `Parsed <strong>${rows.length}</strong> row(s) for <code>${escapeHtml(docName)}</code> · document_id: <code>${escapeHtml(document_id || '')}</code>`;
-
-  const head = `
-    <thead>
-      <tr>
-        <th>document_id</th>
-        <th>doc_name</th>
-        <th>uploaded_by</th>
-        <th>chunk_index</th>
-        <th>datum</th>
-        <th>naam</th>
-        <th>bron</th>
-        <th>link</th>
-        <th>invloed_text</th>
-        <th>content</th>
-      </tr>
-    </thead>`;
-
-  const body = rows.map(r => `
-    <tr>
-      <td>${escapeHtml(r.document_id || '')}</td>
-      <td>${escapeHtml(r.doc_name || '')}</td>
-      <td>${escapeHtml(r.uploaded_by || '')}</td>
-      <td>${(r.chunk_index ?? '')}</td>
-      <td>${escapeHtml(r.datum || '')}</td>
-      <td>${escapeHtml(r.naam || '')}</td>
-      <td>${escapeHtml(r.bron || '')}</td>
-      <td>${escapeHtml(r.link || '')}</td>
-      <td>${escapeHtml(r.invloed_text || '')}</td>
-      <td>${escapeHtml(r.content || '')}</td>
-    </tr>
-  `).join('');
-
-  els.previewTable.innerHTML = `<table class="pp-table">${head}<tbody>${body}</tbody></table>`;
-}
-
-// ──────────────────────────────────────────────────────────
-// Events
-// ──────────────────────────────────────────────────────────
-els.btnPreview.addEventListener('click', async () => {
-  if (!els.file.files?.length) return alert('Please choose a .csv or .xlsx file');
-  if (!els.doc_name.value.trim()) return alert('Please enter a document name');
-  if (!els.uploaded_by.value.trim()) return alert('Please choose "Uploaded by"');
-
-  setBusy(true);
-  try {
-    const r = await fetch('/admin/ingest', {
-      method: 'POST',
-      body: buildFormData('preview'),
-      credentials: 'same-origin'
-    });
-    const j = await r.json();
-    if (!r.ok || !j?.ok) throw new Error(j?.error || 'Failed to parse file');
-
-    lastPreview = { rows: j.rows || [], document_id: j.document_id || null, csv: j.csv || '' };
-    renderPreview(lastPreview.rows, lastPreview.document_id);
-    els.btnUpload.disabled = !els.confirm.checked;
-  } catch (e) {
-    alert(e.message || String(e));
-  } finally {
-    setBusy(false);
-  }
-});
-
-els.confirm.addEventListener('change', () => {
-  els.btnUpload.disabled = uploading || !lastPreview || !els.confirm.checked;
-});
-
-els.btnDownloadPreview.addEventListener('click', () => {
-  if (!lastPreview?.csv) return;
-  const blob = new Blob([lastPreview.csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-
-  const docName = (lastPreview.rows?.[0]?.doc_name || 'preview');
-  const safe = String(docName).replace(/[^\w.-]+/g, '_').slice(0, 80);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${safe}_preview.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-});
-
-els.btnUpload.addEventListener('click', async () => {
-  if (!lastPreview) return alert('Please build a preview first.');
-  if (!els.confirm.checked) return alert('Please confirm the preview is correct.');
-  uploading = true;
-  setBusy(true);
-  try {
-    const r = await fetch('/admin/ingest', {
-      method: 'POST',
-      body: buildFormData('upload'),
-      credentials: 'same-origin'
-    });
-    const j = await r.json();
-    if (!r.ok || !j?.ok) throw new Error(j?.error || 'Upload failed');
-
-    alert(`Uploaded ${j.count} row(s) for document ${lastPreview.rows?.[0]?.doc_name || ''}.`);
-    lastPreview = null;
-    els.previewWrap.style.display = 'none';
-    els.form.reset();
-  } catch (e) {
-    alert(e.message || String(e));
-  } finally {
-    uploading = false;
-    setBusy(false);
-  }
-});
