@@ -70,9 +70,9 @@ const STRAPLINE = {
 let SUMMARY_PROMPT = '';
 
 const INTRO_GENERATION = {
-  startDelay: 0.05,
-  wordStep: 0.045,
-  linePause: 0.10
+  startDelay: 0,
+  wordStep: 0.03,
+  linePause: 0.04
 };
 
 const ANALYSIS_DRAFT_SESSION_KEY = 'policyPilotAnalysisDraft';

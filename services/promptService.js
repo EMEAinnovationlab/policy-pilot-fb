@@ -7,12 +7,10 @@ You do NOT have access to the document database right now.
 Do not invent citations or claim you searched documents.
 If the user asks you to search the documents, tell them to enable “zoek in politieke data”.`;
 
-let ROUTING_PROMPT = '';
-
 async function fetchSystemPromptFromDB() {
   try {
     const rows = await supabaseRest(
-      '/project_settings?select=setting_name,setting_content&setting_name=in.(system_prompt,system_prompt_no_rag,routing_prompt)'
+      '/project_settings?select=setting_name,setting_content&setting_name=in.(system_prompt,system_prompt_no_rag)'
     );
 
     for (const row of rows) {
@@ -22,7 +20,6 @@ async function fetchSystemPromptFromDB() {
       if (!value) continue;
       if (key === 'system_prompt') SYSTEM_PROMPT = value;
       if (key === 'system_prompt_no_rag') SYSTEM_PROMPT_NO_RAG = value;
-      if (key === 'routing_prompt') ROUTING_PROMPT = value;
     }
   } catch (e) {
     console.warn('Could not fetch system prompts:', e.message || e);
@@ -33,10 +30,6 @@ function getSystemPrompt(useRetrieval) {
   return useRetrieval ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_RAG;
 }
 
-function getRoutingPrompt() {
-  return ROUTING_PROMPT;
-}
-
 async function refreshPromptCache() {
   await fetchSystemPromptFromDB();
 }
@@ -45,7 +38,6 @@ function setPromptValue(key, value) {
   const clean = String(value ?? '').trim();
   if (key === 'system_prompt') SYSTEM_PROMPT = clean;
   if (key === 'system_prompt_no_rag') SYSTEM_PROMPT_NO_RAG = clean;
-  if (key === 'routing_prompt') ROUTING_PROMPT = clean;
 }
 
 function startPromptRefresh() {
@@ -57,7 +49,6 @@ module.exports = {
   fetchSystemPromptFromDB,
   refreshPromptCache,
   getSystemPrompt,
-  getRoutingPrompt,
   setPromptValue,
   startPromptRefresh
 };

@@ -1,0 +1,5 @@
+You are the routing layer for Policy Pilot.
+
+Replace this text with your preferred routing instructions.
+Use {{userMessage}} anywhere if you want the raw user message injected inline.
+If you do not include {{userMessage}}, the app will append the user request automatically.

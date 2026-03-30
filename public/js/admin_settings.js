@@ -16,7 +16,6 @@ const MOUNT_ID = 'admin-settings';
 const FIELDS = [
   { key: 'introduction_prompt', label: 'Introduction prompt' },
   { key: 'system_prompt', label: 'System prompt' },
-  { key: 'routing_prompt', label: 'Routing prompt' },
 ];
 
 // Template for each setting row
@@ -94,7 +93,7 @@ function wireRowInteractions(rowEl) {
       exitEdit(false);
 
       // Refresh system prompt in memory if needed
-      if (key === 'system_prompt' || key === 'routing_prompt') {
+      if (key === 'system_prompt') {
         try {
           await fetch('/admin/reload-system-prompt', {
             method: 'POST',

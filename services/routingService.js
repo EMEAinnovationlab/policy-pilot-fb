@@ -2,7 +2,10 @@ const {
   OPENAI_API_KEY,
   OPENAI_MODEL
 } = require('../config/env');
-const { getRoutingPrompt, refreshPromptCache } = require('./promptService');
+const fs = require('fs/promises');
+const path = require('path');
+
+const ROUTING_PROMPT_PATH = path.join(__dirname, '..', 'routing_prompt.txt');
 
 function fallbackRouting(userMessage) {
   return {
@@ -46,17 +49,15 @@ async function routePolicyPilotRequest(userMessage) {
   let prompt = '';
 
   try {
-    await refreshPromptCache();
-
-    const template = getRoutingPrompt();
+    const template = await fs.readFile(ROUTING_PROMPT_PATH, 'utf8');
     if (!template || !template.trim()) {
-      console.warn('[routePolicyPilotRequest] Missing routing_prompt in project_settings; using fallback routing.');
+      console.warn('[routePolicyPilotRequest] Missing or empty routing_prompt.txt; using fallback routing.');
       return {
         ...fallbackRouting(userMessage),
         debug: {
           inputPrompt: userMessage,
           routingPrompt: '',
-          routingPromptSource: 'missing-after-supabase-refresh',
+          routingPromptSource: 'missing-file',
           routingRawContent: null,
           routingRawJson: null
         }
@@ -97,7 +98,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase-refresh',
+          routingPromptSource: 'routing_prompt.txt',
           routingRawContent: null,
           routingRawJson: null
         }
@@ -114,7 +115,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase-refresh',
+          routingPromptSource: 'routing_prompt.txt',
           routingRawContent: null,
           routingRawJson: json
         }
@@ -137,7 +138,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase-refresh',
+          routingPromptSource: 'routing_prompt.txt',
           routingRawContent: content,
           routingRawJson: json
         }
@@ -160,7 +161,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
-        routingPromptSource: 'supabase-refresh',
+        routingPromptSource: 'routing_prompt.txt',
         routingRawContent: content,
         routingRawJson: json
       }
@@ -172,7 +173,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
-        routingPromptSource: prompt ? 'supabase-refresh' : 'missing-after-supabase-refresh',
+        routingPromptSource: prompt ? 'routing_prompt.txt' : 'missing-file',
         routingRawContent: null,
         routingRawJson: null
       }
