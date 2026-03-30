@@ -9,7 +9,7 @@ const {
 } = require('../config/env');
 
 const { sse } = require('../lib/sse');
-const { routePolicyPilotRequest } = require('./routingService');
+const { expandQueryWithSynonyms } = require('./queryExpansionService');
 const { getSystemPrompt } = require('./promptService');
 
 async function callRag(expandedQuery, uploadedByLabel) {
@@ -113,7 +113,7 @@ function buildContextFromMatches(pm, ed) {
     sources.push({
       n: i + 1,
       title,
-      url: m.url || m.link || null,
+      url: m.url || null,
       uploaded_by: src
     });
   }
@@ -131,7 +131,6 @@ function buildMessages({
   useRetrieval,
   userMessage,
   expandedQuery,
-  routingInfo,
   contextBody,
   totalHits,
   hitsPm,
@@ -148,12 +147,6 @@ You have access to a vector database with documents from:
 - 🔴 Public Matters (policy, parties, issue papers)
 - 🔵 Edelman (Edelman Trust Barometer reports)
 
-ROUTING DECISION:
-- allowed: ${routingInfo?.allowed ? 'true' : 'false'}
-- route: ${routingInfo?.route || 'rag'}
-- reason: ${routingInfo?.reason || 'n/a'}
-- keywords: ${(routingInfo?.keywords || []).join(', ') || 'none'}
-
 The retrieval query was expanded with synonyms/related terms:
 "${expandedQuery}"
 
@@ -162,9 +155,7 @@ RAG STATS:
 - Public Matters matches: ${hitsPm}
 - Edelman matches: ${hitsEd}
 
-Use the CONTEXT below as your primary source of truth.
-If there are no relevant matches, say that clearly.
-Do not claim sources you do not have.
+Use the CONTEXT below as your primary source of truth. If there are no relevant matches, you MUST explicitly say so.
 
 CONTEXT DOCUMENT EXCERPTS:
 ${contextBody}
@@ -237,13 +228,6 @@ async function streamOpenAIChat({ messages, res, useRetrieval, sources }) {
   }
 }
 
-function streamImmediateAssistantMessage(res, text) {
-  sse(res, { type: 'token', text });
-  sse(res, { type: 'sources', items: [] });
-  sse(res, { type: 'done' });
-  return res.end();
-}
-
 async function handleChat(req, res) {
   try {
     const userMessage = (req.body?.message || '').toString().slice(0, 8000);
@@ -258,15 +242,6 @@ async function handleChat(req, res) {
 
     const useRetrieval = !!req.body?.useRetrieval;
 
-    let routingInfo = {
-      allowed: true,
-      route: useRetrieval ? 'rag' : 'chat',
-      reason: 'Retrieval not requested',
-      userMessage: '',
-      keywords: [],
-      expandedQuery: userMessage
-    };
-
     let expandedQuery = userMessage;
     let pm = { matches: [], error: null };
     let ed = { matches: [], error: null };
@@ -277,39 +252,7 @@ async function handleChat(req, res) {
     let hitsEd = 0;
 
     if (useRetrieval) {
-      routingInfo = await routePolicyPilotRequest(userMessage);
-
-      if (!routingInfo.allowed || routingInfo.route === 'reject') {
-        const rejectText =
-          routingInfo.userMessage ||
-          'Deze vraag past niet goed binnen Policy Pilot. Formuleer je vraag meer richting politiek, beleid, publieke opinie of impact op de technologiesector.';
-
-        return streamImmediateAssistantMessage(res, rejectText);
-      }
-
-      if (routingInfo.route === 'chat') {
-        const safeHistory = sanitizeHistory(req.body?.history, userMessage);
-        const messages = buildMessages({
-          useRetrieval: false,
-          userMessage,
-          expandedQuery: userMessage,
-          routingInfo,
-          contextBody: '(retrieval not used for this request)',
-          totalHits: 0,
-          hitsPm: 0,
-          hitsEd: 0,
-          safeHistory
-        });
-
-        return await streamOpenAIChat({
-          messages,
-          res,
-          useRetrieval: false,
-          sources: []
-        });
-      }
-
-      expandedQuery = routingInfo.expandedQuery || userMessage;
+      expandedQuery = await expandQueryWithSynonyms(userMessage);
 
       [pm, ed] = await Promise.all([
         callRag(expandedQuery, 'Public Matters'),
@@ -317,10 +260,7 @@ async function handleChat(req, res) {
       ]);
 
       if ((pm.error && !pm.matches.length) && (ed.error && !ed.matches.length)) {
-        sse(res, {
-          type: 'error',
-          message: 'RAG backend (query-docs) is not responding or misconfigured.'
-        });
+        sse(res, { type: 'error', message: 'RAG backend (query-docs) is not responding or misconfigured.' });
       }
 
       const context = buildContextFromMatches(pm, ed);
@@ -337,7 +277,6 @@ async function handleChat(req, res) {
       useRetrieval,
       userMessage,
       expandedQuery,
-      routingInfo,
       contextBody,
       totalHits,
       hitsPm,
