@@ -47,6 +47,20 @@ async function routePolicyPilotRequest(userMessage) {
 
   try {
     const template = getRoutingPrompt();
+    if (!template || !template.trim()) {
+      console.warn('[routePolicyPilotRequest] Missing routing_prompt in project_settings; using fallback routing.');
+      return {
+        ...fallbackRouting(userMessage),
+        debug: {
+          inputPrompt: userMessage,
+          routingPrompt: '',
+          routingPromptSource: 'missing',
+          routingRawContent: null,
+          routingRawJson: null
+        }
+      };
+    }
+
     prompt = template.includes('{{userMessage}}')
       ? template.replaceAll('{{userMessage}}', userMessage)
       : `${template}\n\nUser request:\n"${userMessage}"`;
@@ -81,6 +95,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
+          routingPromptSource: 'supabase',
           routingRawContent: null,
           routingRawJson: null
         }
@@ -97,6 +112,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
+          routingPromptSource: 'supabase',
           routingRawContent: null,
           routingRawJson: json
         }
@@ -119,6 +135,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
+          routingPromptSource: 'supabase',
           routingRawContent: content,
           routingRawJson: json
         }
@@ -141,6 +158,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
+        routingPromptSource: 'supabase',
         routingRawContent: content,
         routingRawJson: json
       }
@@ -152,6 +170,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
+        routingPromptSource: prompt ? 'supabase' : 'missing',
         routingRawContent: null,
         routingRawJson: null
       }
