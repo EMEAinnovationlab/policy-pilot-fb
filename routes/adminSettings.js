@@ -61,7 +61,11 @@ router.patch('/admin/settings', async (req, res) => {
       if (row) {
         updated[row.setting_name] = row.setting_content;
 
-        if (row.setting_name === 'system_prompt' || row.setting_name === 'system_prompt_no_rag') {
+        if (
+          row.setting_name === 'system_prompt'
+          || row.setting_name === 'system_prompt_no_rag'
+          || row.setting_name === 'routing_prompt'
+        ) {
           setPromptValue(row.setting_name, row.setting_content);
         }
       }

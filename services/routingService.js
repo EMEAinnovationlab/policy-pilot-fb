@@ -2,6 +2,7 @@ const {
   OPENAI_API_KEY,
   OPENAI_MODEL
 } = require('../config/env');
+const { getRoutingPrompt } = require('./promptService');
 
 function fallbackRouting(userMessage) {
   return {
@@ -45,49 +46,10 @@ async function routePolicyPilotRequest(userMessage) {
   let prompt = '';
 
   try {
-    prompt = `
-You are the routing layer for Policy Pilot.
-
-Policy Pilot is intended for:
-- political developments
-- policy analysis
-- public affairs
-- trust and reputation
-- public sentiment
-- government, parliament, regulation
-- technology sector impact
-- corporate impact of political or societal developments
-- questions grounded in the Policy Pilot document database
-
-Your tasks:
-1. Decide whether the request is suitable for Policy Pilot retrieval.
-2. If the request is not suitable, set allowed=false and route="reject".
-3. If the request is suitable for retrieval, set allowed=true and route="rag".
-4. If the request is conversational but should not use retrieval, set allowed=true and route="chat".
-5. Extract 3 to 8 core keywords.
-6. Generate an expanded query with close synonyms and related search terms for vector retrieval.
-7. Return strict JSON only.
-
-Rules:
-- Return valid JSON only
-- Do not wrap JSON in markdown
-- Keep userMessage short and in Dutch
-- For reject cases, explain briefly how the user can reformulate the question
-- For rag cases, expandedQuery must start with the original user message
-
-Required JSON schema:
-{
-  "allowed": true,
-  "route": "rag",
-  "reason": "short explanation",
-  "userMessage": "",
-  "keywords": ["keyword 1", "keyword 2"],
-  "expandedQuery": "original query, related term 1, related term 2"
-}
-
-User request:
-"${userMessage}"
-    `.trim();
+    const template = getRoutingPrompt();
+    prompt = template.includes('{{userMessage}}')
+      ? template.replaceAll('{{userMessage}}', userMessage)
+      : `${template}\n\nUser request:\n"${userMessage}"`;
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
