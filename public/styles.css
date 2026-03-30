@@ -1527,7 +1527,7 @@ x§
 .analysis-request-pill {
   width: fit-content;
   max-width: 100%;
-  margin: 0 auto 75px;
+  margin: 28px auto 96px;
   background: var(--white);
   box-shadow: var(--shadow-bg-drop-speech);
   border-radius: 999px;
