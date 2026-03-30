@@ -445,6 +445,7 @@ function splitTextToAnimatedWords(el, startDelay = 0, step = 0.045) {
 
   const words = original.trim().split(/\s+/).filter(Boolean);
   el.innerHTML = '';
+  el.classList.add('generated-ready');
   el.classList.add('generated-line');
 
   let delay = startDelay;
@@ -476,6 +477,7 @@ function resetGeneratedIntroText() {
     const original = el.dataset.originalText || el.textContent || '';
     el.dataset.originalText = original;
     el.textContent = original;
+    el.classList.remove('generated-ready');
     el.classList.remove('generated-line');
   });
 
@@ -518,6 +520,9 @@ function showIntroActions({ animate = true } = {}) {
   }
 
   resetGeneratedIntroText();
+  document.querySelectorAll('[data-generate]').forEach((el) => {
+    el.classList.add('generated-ready');
+  });
   dom.introActions?.classList.add('is-generated');
 }
 
