@@ -171,7 +171,21 @@ ${contextBody}
   ];
 }
 
+function emitBrowserDebug(res, label, payload) {
+  sse(res, {
+    type: 'debug',
+    label,
+    payload
+  });
+}
+
 async function streamOpenAIChat({ messages, res, useRetrieval, sources }) {
+  emitBrowserDebug(res, 'Main Prompt Payload', {
+    useRetrieval,
+    outputModel: OPENAI_MODEL,
+    messages
+  });
+
   const openaiResp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -261,6 +275,21 @@ async function handleChat(req, res) {
 
     if (useRetrieval) {
       const routing = await routePolicyPilotRequest(userMessage);
+
+      emitBrowserDebug(res, 'Routing Debug', {
+        inputPrompt: routing.debug?.inputPrompt || userMessage,
+        routingPrompt: routing.debug?.routingPrompt || '',
+        routingResult: {
+          allowed: routing.allowed,
+          route: routing.route,
+          reason: routing.reason,
+          userMessage: routing.userMessage,
+          keywords: routing.keywords,
+          expandedQuery: routing.expandedQuery
+        },
+        routingRawContent: routing.debug?.routingRawContent || null,
+        routingRawJson: routing.debug?.routingRawJson || null
+      });
 
       if (!routing.allowed || routing.route === 'reject') {
         const rejectText = routing.userMessage

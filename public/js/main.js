@@ -1327,6 +1327,11 @@ async function streamChatToElement({
         scheduleScrollButtonUpdate();
       } else if (evt.type === 'sources') {
         sources = Array.isArray(evt.items) ? evt.items : [];
+      } else if (evt.type === 'debug') {
+        const label = evt.label || 'Chat Debug';
+        console.group(`[Policy Pilot] ${label}`);
+        console.log(evt.payload);
+        console.groupEnd();
       } else if (evt.type === 'error') {
         throw new Error(evt.message || 'Unknown stream error');
       } else if (evt.type === 'done') {

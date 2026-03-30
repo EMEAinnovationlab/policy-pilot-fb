@@ -42,8 +42,10 @@ function normalizeRoutingResult(parsed, userMessage) {
 }
 
 async function routePolicyPilotRequest(userMessage) {
+  let prompt = '';
+
   try {
-    const prompt = `
+    prompt = `
 You are the routing layer for Policy Pilot.
 
 Policy Pilot is intended for:
@@ -112,7 +114,15 @@ User request:
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
       console.error('[routePolicyPilotRequest] OpenAI error:', resp.status, txt);
-      return fallbackRouting(userMessage);
+      return {
+        ...fallbackRouting(userMessage),
+        debug: {
+          inputPrompt: userMessage,
+          routingPrompt: prompt,
+          routingRawContent: null,
+          routingRawJson: null
+        }
+      };
     }
 
     const json = await resp.json();
@@ -120,7 +130,15 @@ User request:
 
     if (!content) {
       console.warn('[routePolicyPilotRequest] Empty routing response, using fallback.');
-      return fallbackRouting(userMessage);
+      return {
+        ...fallbackRouting(userMessage),
+        debug: {
+          inputPrompt: userMessage,
+          routingPrompt: prompt,
+          routingRawContent: null,
+          routingRawJson: json
+        }
+      };
     }
 
     console.group('Policy Pilot Routing Raw Response');
@@ -134,7 +152,15 @@ User request:
       parsed = JSON.parse(content);
     } catch (err) {
       console.error('[routePolicyPilotRequest] JSON parse error:', err, content);
-      return fallbackRouting(userMessage);
+      return {
+        ...fallbackRouting(userMessage),
+        debug: {
+          inputPrompt: userMessage,
+          routingPrompt: prompt,
+          routingRawContent: content,
+          routingRawJson: json
+        }
+      };
     }
 
     const routing = normalizeRoutingResult(parsed, userMessage);
@@ -148,10 +174,26 @@ User request:
     console.log('Expanded query:', routing.expandedQuery);
     console.groupEnd();
 
-    return routing;
+    return {
+      ...routing,
+      debug: {
+        inputPrompt: userMessage,
+        routingPrompt: prompt,
+        routingRawContent: content,
+        routingRawJson: json
+      }
+    };
   } catch (err) {
     console.error('[routePolicyPilotRequest] error:', err);
-    return fallbackRouting(userMessage);
+    return {
+      ...fallbackRouting(userMessage),
+      debug: {
+        inputPrompt: userMessage,
+        routingPrompt: prompt,
+        routingRawContent: null,
+        routingRawJson: null
+      }
+    };
   }
 }
 
