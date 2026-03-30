@@ -9,8 +9,8 @@ const {
 } = require('../config/env');
 
 const { sse } = require('../lib/sse');
-const { expandQueryWithSynonyms } = require('./queryExpansionService');
 const { getSystemPrompt } = require('./promptService');
+const { routePolicyPilotRequest } = require('./routingService');
 
 async function callRag(expandedQuery, uploadedByLabel) {
   const body = {
@@ -228,6 +228,13 @@ async function streamOpenAIChat({ messages, res, useRetrieval, sources }) {
   }
 }
 
+function streamImmediateAssistantMessage(res, text) {
+  sse(res, { type: 'token', text: String(text || '') });
+  sse(res, { type: 'sources', items: [] });
+  sse(res, { type: 'done' });
+  return res.end();
+}
+
 async function handleChat(req, res) {
   try {
     const userMessage = (req.body?.message || '').toString().slice(0, 8000);
@@ -250,10 +257,25 @@ async function handleChat(req, res) {
     let totalHits = 0;
     let hitsPm = 0;
     let hitsEd = 0;
+    let effectiveUseRetrieval = useRetrieval;
 
     if (useRetrieval) {
-      expandedQuery = await expandQueryWithSynonyms(userMessage);
+      const routing = await routePolicyPilotRequest(userMessage);
 
+      if (!routing.allowed || routing.route === 'reject') {
+        const rejectText = routing.userMessage
+          || 'Deze vraag valt buiten de scope van Policy Pilot. Formuleer je vraag meer richting beleid, politiek, publieke opinie of impact op de technologiesector.';
+        return streamImmediateAssistantMessage(res, rejectText);
+      }
+
+      if (routing.route === 'chat') {
+        effectiveUseRetrieval = false;
+      } else {
+        expandedQuery = routing.expandedQuery || userMessage;
+      }
+    }
+
+    if (effectiveUseRetrieval) {
       [pm, ed] = await Promise.all([
         callRag(expandedQuery, 'Public Matters'),
         callRag(expandedQuery, 'Edelman')
@@ -274,7 +296,7 @@ async function handleChat(req, res) {
     const safeHistory = sanitizeHistory(req.body?.history, userMessage);
 
     const messages = buildMessages({
-      useRetrieval,
+      useRetrieval: effectiveUseRetrieval,
       userMessage,
       expandedQuery,
       contextBody,
@@ -287,7 +309,7 @@ async function handleChat(req, res) {
     await streamOpenAIChat({
       messages,
       res,
-      useRetrieval,
+      useRetrieval: effectiveUseRetrieval,
       sources
     });
   } catch (e) {

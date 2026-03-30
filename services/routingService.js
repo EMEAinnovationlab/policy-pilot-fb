@@ -22,7 +22,7 @@ function normalizeRoutingResult(parsed, userMessage) {
 
   const keywords = Array.isArray(parsed?.keywords)
     ? parsed.keywords
-        .map(v => String(v || '').trim())
+        .map((value) => String(value || '').trim())
         .filter(Boolean)
         .slice(0, 12)
     : [];
@@ -143,8 +143,8 @@ User request:
     console.groupEnd();
 
     return routing;
-  } catch (e) {
-    console.error('[routePolicyPilotRequest] error:', e);
+  } catch (err) {
+    console.error('[routePolicyPilotRequest] error:', err);
     return fallbackRouting(userMessage);
   }
 }
