@@ -507,7 +507,6 @@ function playGeneratedIntro() {
 }
 
 function hideIntroActions() {
-  resetGeneratedIntroText();
   hide(dom.introActions);
 }
 
@@ -663,20 +662,31 @@ function renderReportEyebrow(text, { loading = false, dots = '' } = {}) {
 
 function setReportEyebrow(text, { loading = false, dots = '' } = {}) {
   appState.reportEyebrowBaseText = text;
+  const wasLoading = appState.reportEyebrowLoading;
   appState.reportEyebrowLoading = loading;
 
   const eyebrow = document.getElementById('analysis-report-eyebrow');
   if (!eyebrow) return;
 
-  eyebrow.innerHTML = renderReportEyebrow(text, { loading, dots });
+  let icon = document.getElementById('analysis-report-eyebrow-icon');
+  let textEl = document.getElementById('analysis-report-eyebrow-text');
+  let dotsEl = document.getElementById('analysis-report-eyebrow-dots');
+
+  if (!icon || !textEl || !dotsEl) {
+    eyebrow.innerHTML = renderReportEyebrow(text, { loading, dots });
+    icon = document.getElementById('analysis-report-eyebrow-icon');
+    textEl = document.getElementById('analysis-report-eyebrow-text');
+    dotsEl = document.getElementById('analysis-report-eyebrow-dots');
+  } else {
+    textEl.textContent = text;
+    dotsEl.textContent = loading ? dots : '';
+  }
 
   if (loading) {
-    const icon = document.getElementById('analysis-report-eyebrow-icon');
-    if (icon?.animate) {
+    if (icon?.animate && (!wasLoading || !appState.reportEyebrowIconAnimation)) {
       if (appState.reportEyebrowIconAnimation?.cancel) {
         appState.reportEyebrowIconAnimation.cancel();
       }
-
       appState.reportEyebrowIconAnimation = icon.animate(
         [
           { transform: 'rotate(0deg)' },
