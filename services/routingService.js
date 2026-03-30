@@ -123,6 +123,12 @@ User request:
       return fallbackRouting(userMessage);
     }
 
+    console.group('Policy Pilot Routing Raw Response');
+    console.log('Original:', userMessage);
+    console.log('Raw content:', content);
+    console.log('Raw JSON:', json);
+    console.groupEnd();
+
     let parsed;
     try {
       parsed = JSON.parse(content);
