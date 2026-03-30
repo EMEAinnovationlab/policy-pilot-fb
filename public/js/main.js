@@ -1808,7 +1808,7 @@ const restoredDraft = restoredAnalysis ? false : restoreDraftProgress();
 if (!restoredAnalysis && !restoredDraft) {
   showIntroActions({ animate: true });
 } else {
-  hideIntroActions();
+  showIntroActions({ animate: false });
 }
 
 scheduleScrollButtonUpdate();3

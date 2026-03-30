@@ -37,6 +37,10 @@ function getRoutingPrompt() {
   return ROUTING_PROMPT;
 }
 
+async function refreshPromptCache() {
+  await fetchSystemPromptFromDB();
+}
+
 function setPromptValue(key, value) {
   const clean = String(value ?? '').trim();
   if (key === 'system_prompt') SYSTEM_PROMPT = clean;
@@ -51,6 +55,7 @@ function startPromptRefresh() {
 
 module.exports = {
   fetchSystemPromptFromDB,
+  refreshPromptCache,
   getSystemPrompt,
   getRoutingPrompt,
   setPromptValue,

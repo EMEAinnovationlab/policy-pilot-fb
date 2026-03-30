@@ -2,7 +2,7 @@ const {
   OPENAI_API_KEY,
   OPENAI_MODEL
 } = require('../config/env');
-const { getRoutingPrompt } = require('./promptService');
+const { getRoutingPrompt, refreshPromptCache } = require('./promptService');
 
 function fallbackRouting(userMessage) {
   return {
@@ -46,6 +46,8 @@ async function routePolicyPilotRequest(userMessage) {
   let prompt = '';
 
   try {
+    await refreshPromptCache();
+
     const template = getRoutingPrompt();
     if (!template || !template.trim()) {
       console.warn('[routePolicyPilotRequest] Missing routing_prompt in project_settings; using fallback routing.');
@@ -54,7 +56,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: '',
-          routingPromptSource: 'missing',
+          routingPromptSource: 'missing-after-supabase-refresh',
           routingRawContent: null,
           routingRawJson: null
         }
@@ -95,7 +97,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase',
+          routingPromptSource: 'supabase-refresh',
           routingRawContent: null,
           routingRawJson: null
         }
@@ -112,7 +114,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase',
+          routingPromptSource: 'supabase-refresh',
           routingRawContent: null,
           routingRawJson: json
         }
@@ -135,7 +137,7 @@ async function routePolicyPilotRequest(userMessage) {
         debug: {
           inputPrompt: userMessage,
           routingPrompt: prompt,
-          routingPromptSource: 'supabase',
+          routingPromptSource: 'supabase-refresh',
           routingRawContent: content,
           routingRawJson: json
         }
@@ -158,7 +160,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
-        routingPromptSource: 'supabase',
+        routingPromptSource: 'supabase-refresh',
         routingRawContent: content,
         routingRawJson: json
       }
@@ -170,7 +172,7 @@ async function routePolicyPilotRequest(userMessage) {
       debug: {
         inputPrompt: userMessage,
         routingPrompt: prompt,
-        routingPromptSource: prompt ? 'supabase' : 'missing',
+        routingPromptSource: prompt ? 'supabase-refresh' : 'missing-after-supabase-refresh',
         routingRawContent: null,
         routingRawJson: null
       }
