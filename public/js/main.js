@@ -944,15 +944,15 @@ function closeDrawerIfOpen() {
 const analysisExampleQuestions = [
   {
     title: 'Trust',
-    text: 'Hoe verandert het vertrouwen in overheid en technologie sinds 2024?'
+    text: 'Hoe verandert het vertrouwen in overheid en voedingsmiddelenbedrijven sinds 2024?'
   },
   {
     title: 'Positionings',
-    text: 'Wat zijn de belangrijkste politieke standpunten over online veiligheid en privacy?'
+    text: 'Wat zijn de belangrijkste politieke standpunten over voedselveiligheid en transparantie?'
   },
   {
-    title: 'Tech sector',
-    text: 'Welke technologische thema’s spelen op dit moment het sterkst in de politiek?'
+    title: 'F&B sector',
+    text: 'Welke thema’s spelen op dit moment het sterkst in de politiek voor de F&B-sector?'
   }
 ];
 
@@ -963,7 +963,7 @@ const chatExampleQuestions = [
   },
   {
     title: 'Relevantie',
-    text: 'Wat betekent deze analyse voor een techbedrijf in Nederland?'
+    text: 'Wat betekent deze analyse voor een F&B-bedrijf in Nederland?'
   },
   {
     title: 'Nuancering',

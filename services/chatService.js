@@ -293,7 +293,7 @@ async function handleChat(req, res) {
 
       if (!routing.allowed || routing.route === 'reject') {
         const rejectText = routing.userMessage
-          || 'Deze vraag valt buiten de scope van Policy Pilot. Formuleer je vraag meer richting beleid, politiek, publieke opinie of impact op de technologiesector.';
+          || 'Deze vraag valt buiten de scope van Policy Pilot. Formuleer je vraag meer richting beleid, politiek, publieke opinie of impact op de F&B-sector.';
         return streamImmediateAssistantMessage(res, rejectText);
       }
 
