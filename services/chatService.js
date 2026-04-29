@@ -24,7 +24,7 @@ async function callRag(expandedQuery, uploadedByLabel) {
     body.uploaded_by = uploadedByLabel;
   }
 
-  const resp = await fetch(`${SUPABASE_FUNCTIONS_URL}/query-docs-fb`, {
+  const resp = await fetch(`${SUPABASE_FUNCTIONS_URL}/Query-docs-fb`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -36,16 +36,16 @@ async function callRag(expandedQuery, uploadedByLabel) {
 
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    console.error('[query-docs-fb] error:', resp.status, txt);
-    return { matches: [], error: `query-docs-fb error: ${resp.status}` };
+    console.error('[Query-docs-fb] error:', resp.status, txt);
+    return { matches: [], error: `Query-docs-fb error: ${resp.status}` };
   }
 
   try {
     const json = await resp.json();
     return { matches: json?.matches || [], error: null };
   } catch (e) {
-    console.error('[query-docs-fb] invalid JSON:', e);
-    return { matches: [], error: 'query-docs-fb JSON parse error' };
+    console.error('[Query-docs-fb] invalid JSON:', e);
+    return { matches: [], error: 'Query-docs-fb JSON parse error' };
   }
 }
 
@@ -311,7 +311,7 @@ async function handleChat(req, res) {
       ]);
 
       if ((pm.error && !pm.matches.length) && (ed.error && !ed.matches.length)) {
-        sse(res, { type: 'error', message: 'RAG backend (query-docs-fb) is not responding or misconfigured.' });
+        sse(res, { type: 'error', message: 'RAG backend (Query-docs-fb) is not responding or misconfigured.' });
       }
 
       const context = buildContextFromMatches(pm, ed);
