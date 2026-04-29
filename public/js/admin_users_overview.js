@@ -1,4 +1,8 @@
 // /public/js/admin_users_overview.js
+import { applyProjectSettings } from '/js/project_settings.js';
+
+applyProjectSettings().catch(() => {});
+
 document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refresh');
   const hideEmpty  = document.getElementById('hide-empty');

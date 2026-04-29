@@ -19,6 +19,40 @@
   
 }
 
+.login-admin-link {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(23, 38, 84, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.92);
+  color: var(--dark-brown);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.login-admin-link:hover {
+  transform: translateY(-1px);
+  border-color: var(--PublicMatters-blue);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+}
+
+.login-admin-link:focus-visible {
+  outline: 2px solid var(--PublicMatters-blue);
+  outline-offset: 2px;
+}
+
 /* Outer card */
 .login-container {
   width: 50vw;
@@ -67,6 +101,10 @@
   font-weight: 700;
   letter-spacing: .06em;
   font-size: 12px;
+}
+
+.login-badge:empty {
+  display: none;
 }
 
 .login-left h1 {
@@ -182,6 +220,11 @@
 
 /* ----- Responsive ----- */
 @media (max-width: 800px) {
+  .login-admin-link {
+    top: 16px;
+    right: 16px;
+  }
+
   .login-container {
     margin: -2.5vh 20px;
     grid-template-columns: 1fr;
@@ -210,4 +253,3 @@ width: 100%;
 
 
 }
-

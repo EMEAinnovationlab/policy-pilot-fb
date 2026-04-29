@@ -8,8 +8,8 @@ export async function applyProjectSettings() {
     const s = data.settings || {};
     const secondary = s.tool_secondary_name || '';
 
-    // Update all brand subtitles (e.g. <span class="brand-subtitle">...</span>)
-    document.querySelectorAll('.brand-subtitle').forEach(el => {
+    // Update every UI element that mirrors the secondary/tagline text from Supabase.
+    document.querySelectorAll('.brand-subtitle, [data-project-secondary]').forEach(el => {
       el.textContent = secondary;
     });
 
@@ -21,5 +21,4 @@ export async function applyProjectSettings() {
     console.warn('⚠️ Could not load project settings:', err);
   }
 }
-
 
