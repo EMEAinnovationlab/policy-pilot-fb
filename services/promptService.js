@@ -10,7 +10,7 @@ If the user asks you to search the documents, tell them to enable “zoek in pol
 async function fetchSystemPromptFromDB() {
   try {
     const rows = await supabaseRest(
-      '/project_settings?select=setting_name,setting_content&setting_name=in.(system_prompt,system_prompt_no_rag)'
+      '/project_settings_fb?select=setting_name,setting_content&setting_name=in.(system_prompt,system_prompt_no_rag)'
     );
 
     for (const row of rows) {

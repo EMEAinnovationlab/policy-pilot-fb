@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/example-prompts', async (_req, res) => {
   try {
     const rows = await supabaseRest(
-      '/example_prompts?select=id,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc'
+      '/example_prompts_fb?select=id,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc'
     );
     res.json({ ok: true, items: rows });
   } catch (e) {

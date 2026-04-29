@@ -9,7 +9,7 @@ const router = express.Router();
 
 router.get('/admin/settings', async (_req, res) => {
   try {
-    const rows = await supabaseRest('/project_settings?select=setting_name,setting_content');
+    const rows = await supabaseRest('/project_settings_fb?select=setting_name,setting_content');
     const settings = {};
 
     for (const row of rows) {
@@ -38,7 +38,7 @@ router.patch('/admin/settings', async (req, res) => {
 
       let rows;
       try {
-        rows = await supabaseRest(`/project_settings?setting_name=eq.${encodeURIComponent(key)}`, {
+        rows = await supabaseRest(`/project_settings_fb?setting_name=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH',
           headers: { Prefer: 'return=representation' },
           body: { setting_content: value }
@@ -50,7 +50,7 @@ router.patch('/admin/settings', async (req, res) => {
       let row = Array.isArray(rows) && rows[0];
 
       if (!row) {
-        const inserted = await supabaseRest('/project_settings', {
+        const inserted = await supabaseRest('/project_settings_fb', {
           method: 'POST',
           headers: { Prefer: 'return=representation' },
           body: [{ setting_name: key, setting_content: value }]
@@ -88,7 +88,7 @@ router.post('/admin/reload-system-prompt', async (_req, res) => {
 router.get('/admin/example-prompts', async (_req, res) => {
   try {
     const rows = await supabaseRest(
-      '/example_prompts?select=id,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc'
+      '/example_prompts_fb?select=id,prompt_title_nl,prompt_title_en,prompt_full_nl,prompt_full_en&order=id.asc'
     );
     res.json({ ok: true, items: rows });
   } catch (e) {
@@ -100,7 +100,7 @@ router.post('/admin/example-prompts', async (req, res) => {
   try {
     const b = req.body || {};
 
-    const inserted = await supabaseRest('/example_prompts', {
+    const inserted = await supabaseRest('/example_prompts_fb', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
       body: [{
@@ -124,7 +124,7 @@ router.patch('/admin/example-prompts/:id', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Invalid id' });
     }
 
-    const updated = await supabaseRest(`/example_prompts?id=eq.${id}`, {
+    const updated = await supabaseRest(`/example_prompts_fb?id=eq.${id}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: req.body || {}
@@ -143,7 +143,7 @@ router.delete('/admin/example-prompts/:id', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Invalid id' });
     }
 
-    await supabaseRest(`/example_prompts?id=eq.${id}`, { method: 'DELETE' });
+    await supabaseRest(`/example_prompts_fb?id=eq.${id}`, { method: 'DELETE' });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

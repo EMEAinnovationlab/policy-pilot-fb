@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/project-settings', async (_req, res) => {
   try {
-    const rows = await supabaseRest('/project_settings?select=setting_name,setting_content');
+    const rows = await supabaseRest('/project_settings_fb?select=setting_name,setting_content');
     const settings = {};
 
     for (const row of rows) {
@@ -28,7 +28,7 @@ router.get('/site-content', async (req, res) => {
     }
 
     const rows = await supabaseRest(
-      `/site_content?select=page,page_text_en,page_text_nl&limit=1&page=eq.${encodeURIComponent(page)}`
+      `/site_content_fb?select=page,page_text_en,page_text_nl&limit=1&page=eq.${encodeURIComponent(page)}`
     );
 
     if (!rows.length) {
@@ -49,7 +49,7 @@ router.get('/site-content', async (req, res) => {
 router.get('/documents/list', async (_req, res) => {
   try {
     const rows = await supabaseRest(
-      '/documents?select=doc_name,uploaded_by,date_uploaded&order=date_uploaded.desc,uploaded_by.asc,doc_name.asc'
+      '/documents_fb?select=doc_name,uploaded_by,date_uploaded&order=date_uploaded.desc,uploaded_by.asc,doc_name.asc'
     );
 
     const seen = new Set();
@@ -75,7 +75,7 @@ router.get('/documents/list', async (_req, res) => {
 
 router.get('/documents/list-raw', async (_req, res) => {
   try {
-    const rows = await supabaseRest('/documents?select=doc_name,uploaded_by,date_uploaded,content&order=date_uploaded.desc');
+    const rows = await supabaseRest('/documents_fb?select=doc_name,uploaded_by,date_uploaded,content&order=date_uploaded.desc');
     res.json({ ok: true, items: rows });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

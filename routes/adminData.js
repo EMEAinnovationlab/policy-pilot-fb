@@ -9,7 +9,7 @@ router.options('/admin/ingest', (_req, res) => res.status(204).end());
 
 router.get('/admin/data/list', async (_req, res) => {
   try {
-    const rows = await supabaseRest('/documents?select=doc_name,uploaded_by,created_at:date_uploaded&order=date_uploaded.desc');
+    const rows = await supabaseRest('/documents_fb?select=doc_name,uploaded_by,created_at:date_uploaded&order=date_uploaded.desc');
 
     res.json({
       ok: true,
@@ -32,7 +32,7 @@ router.delete('/admin/data/:doc_name', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing doc_name' });
     }
 
-    await supabaseRest(`/documents?doc_name=eq.${encodeURIComponent(name)}`, {
+    await supabaseRest(`/documents_fb?doc_name=eq.${encodeURIComponent(name)}`, {
       method: 'DELETE'
     });
 

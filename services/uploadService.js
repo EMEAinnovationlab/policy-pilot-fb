@@ -209,7 +209,7 @@ function handleSpreadsheetUpload(req, res) {
           mapRow(row, idx, documentId, docName, uploadedBy, vectors[idx])
         );
 
-        await supabaseRest('/documents', {
+        await supabaseRest('/documents_fb', {
           method: 'POST',
           headers: {
             Prefer: 'return=minimal'
